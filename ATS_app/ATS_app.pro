@@ -23,7 +23,6 @@ win32: LIBS += -lws2_32 -lole32 -loleaut32 -lwinmm -lwinscard
 # ─── Include paths ────────────────────────────────────────────────────────────
 INCLUDEPATH += \
     $$PWD \
-    $$PWD/api \
     $$PWD/.. \
     $$PWD/../emv_lib/include \
     $$PWD/../mqtt_lib \
@@ -42,23 +41,16 @@ SOURCES += \
     core/AppThread.cpp \
     core/KeySimulator.cpp \
     log/LogManager.cpp \
-    api/ats_lcd.c \
-    api/ats_printer.c \
-    api/ats_net.c \
-    api/ats_audio.c \
-    api/ats_fs.c \
-    api/ats_sys.cpp \
     lua/LuaEngine.cpp \
-    ../ATS_app/app_main.c
+    sdk/ats_lcd.c \
+    sdk/ats_printer.c \
+    sdk/ats_net.c \
+    sdk/ats_audio.c \
+    sdk/ats_fs.c \
+    sdk/ats_sys.cpp \
+    app/main.c
 
 HEADERS += \
-    api/ats_error.h \
-    api/ats_lcd.h \
-    api/ats_printer.h \
-    api/ats_net.h \
-    api/ats_audio.h \
-    api/ats_fs.h \
-    api/ats_sys.h \
     ui/MainWindow.h \
     core/TestCase.h \
     core/TestRunner.h \
@@ -67,6 +59,13 @@ HEADERS += \
     log/LogManager.h \
     lua/LuaEngine.h \
     lua/LuaTestCase.h \
+    sdk/ats_error.h \
+    sdk/ats_lcd.h \
+    sdk/ats_printer.h \
+    sdk/ats_net.h \
+    sdk/ats_audio.h \
+    sdk/ats_fs.h \
+    sdk/ats_sys.h \
 
 FORMS += \
     ui/MainWindow.ui

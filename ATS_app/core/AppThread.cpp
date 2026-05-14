@@ -1,11 +1,17 @@
 #include "AppThread.h"
 #include "../log/LogManager.h"
+#include "sdk/ats_sys.h"
 
 /* 声明原始嵌入式程序入口（来自 main.c）*/
 #ifdef __cplusplus
 extern "C" {
 #endif
     extern void ats_main(void);
+
+    void __attribute__((weak)) ats_main(void)
+    {
+        ats_log_print(ATS_LOG_LEVEL_WARN, "未找到App定义的主入口函数(ats_main), App运行失败");
+    }
 #ifdef __cplusplus
 }
 #endif

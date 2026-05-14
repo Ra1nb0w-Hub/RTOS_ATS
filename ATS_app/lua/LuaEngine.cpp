@@ -1,8 +1,8 @@
 #include "LuaEngine.h"
 #include "../log/LogManager.h"
-#include "../api/ats_net.h"
-#include "../api/ats_sys.h"
-#include "../api/ats_printer.h"
+#include "sdk/ats_net.h"
+#include "sdk/ats_sys.h"
+#include "sdk/ats_printer.h"
 
 extern "C" {
 #include "../../lua_lib/lua.h"

@@ -9,7 +9,7 @@ SUBDIRS += \
     mqtt_lib \
     lua_lib \
     emv_lib \
-    ATS_sdk
+    ATS_app
 
 # ATS_app 依赖三个库，确保先编库再编 app
 ATS_app.depends = mbedtls_lib mqtt_lib lua_lib emv_lib

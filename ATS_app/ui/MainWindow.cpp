@@ -1,7 +1,7 @@
 #include "MainWindow.h"
 #include "ui_MainWindow.h"
-#include "api/ats_lcd.h"
-#include "api/ats_printer.h"
+#include "sdk/ats_lcd.h"
+#include "sdk/ats_printer.h"
 
 #include <QFileDialog>
 #include <QMessageBox>

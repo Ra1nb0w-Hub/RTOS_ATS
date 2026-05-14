@@ -12,10 +12,10 @@
 #include "core/KeySimulator.h"
 #include "core/AppThread.h"
 #include "log/LogManager.h"
-#include "api/ats_sys.h"
-#include "api/ats_audio.h"
-#include "api/ats_net.h"
-#include "api/ats_printer.h"
+#include "sdk/ats_sys.h"
+#include "sdk/ats_audio.h"
+#include "sdk/ats_net.h"
+#include "sdk/ats_printer.h"
 
 /**
  * @brief 测试用例配置结构

@@ -9,7 +9,7 @@
 #include <QApplication>
 #include "ui/MainWindow.h"
 #include "log/LogManager.h"
-#include "api/ats_audio.h"
+#include "sdk/ats_audio.h"
 
 int main(int argc, char *argv[])
 {

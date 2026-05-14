@@ -4,7 +4,7 @@
 #include <QMutexLocker>
 #include <QThread>
 
-#include "ats_sys.h"
+#include "sdk/ats_sys.h"
 
 LogManager *LogManager::s_instance = nullptr;
 
