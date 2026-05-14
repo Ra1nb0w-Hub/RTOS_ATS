@@ -1,0 +1,18 @@
+{
+	"folders": [
+		{
+			"name": "ATS",
+			"path": "."
+		}
+	],
+	"settings": {
+		"C_Cpp.default.defines": [
+			"ATS_SIMULATOR=1",
+			"ATS=1"
+		],
+
+		"C_Cpp.default.includePath": [
+			"${workspaceFolder}/**"
+		]
+	}
+}

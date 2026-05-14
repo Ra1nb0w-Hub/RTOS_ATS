@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<config>
+
+    <!-- 设备默认配置 -->
+    <default>
+        <device_serial_number>OPAY0001561</device_serial_number>
+        <device_net_mode>cellular</device_net_mode>
+        <!-- <device_net_mode>wifi</device_net_mode> -->
+		
+        <!-- 蜂窝网络相关 -->
+		<device_net_celluar_mcc>460</device_net_celluar_mcc>
+        <device_net_celluar_mnc>00</device_net_celluar_mnc>
+        <device_net_celluar_lac>4288</device_net_celluar_lac>
+        <device_net_celluar_cid>227109315</device_net_celluar_cid>
+        <device_net_cellular_signal>-70</device_net_cellular_signal>
+        <device_net_cellular_imei>864114073683108</device_net_cellular_imei>
+        <device_net_cellular_imsi>460048449713097</device_net_cellular_imsi>
+
+        <!-- WiFi网络相关 -->
+        <device_net_ssid>mjtt-12138</device_net_ssid>
+        <device_net_wifi_signal>-50</device_net_wifi_signal>
+        <device_net_ap_list>
+            <ap>
+                <ssid>mjtt-12138</ssid>
+                <mac>f0:b4:29:27:d1:97</mac>
+                <signal>-50</signal>
+            </ap>
+            <ap>
+                <ssid>OPay-Pro</ssid>
+                <mac>d0:15:a6:cb:17:2b</mac>
+                <signal>-52</signal>
+            </ap>
+            <ap>
+                <ssid>SkyWork-DLP-WiFi</ssid>
+                <mac>d0:15:a6:cb:17:2a</mac>
+                <signal>-52</signal>
+            </ap>
+            <ap>
+                <ssid>KL-IT-WIFI</ssid>
+                <mac>d0:15:a6:cb:17:20</mac>
+                <signal>-52</signal>
+            </ap>
+            <ap>
+                <ssid>Opera-Employee-OTP</ssid>
+                <mac>d0:15:a6:cb:17:21</mac>
+                <signal>-52</signal>
+            </ap>
+            <ap>
+                <ssid>DramaWave-WiFi</ssid>
+                <mac>d0:15:a6:cb:17:2d</mac>
+                <signal>-52</signal>
+            </ap>
+            <ap>
+                <ssid>Playverse-WiFi</ssid>
+                <mac>d0:15:a6:cb:17:2e</mac>
+                <signal>-52</signal>
+            </ap>
+        </device_net_ap_list>
+    </default>
+
+    <!-- 测试用例列表 -->
+    <cases>
+        <!-- name:    必需，列表中展示的名称 -->
+        <!-- script:  可选，关联的 Lua 脚本路径 -->
+        <!-- enabled: 可选，是否启用(true/false)，默认 true -->
+        <!-- chosen:  可选，是否选择(true/false)，默认 false -->
+        <case
+            name="测试网络断开10秒后恢复"
+            script="./test_net_disconnect.lua"
+        />
+        <case
+            name="测试打印小票"
+            script="./test_print.lua"
+            chosen="true"
+        />
+    </cases>
+
+</config>
