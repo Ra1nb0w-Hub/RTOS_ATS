@@ -596,10 +596,17 @@ int emv_tools_build_dol_data(unsigned short tag, unsigned char *data, size_t *da
             tmp_len2 = tmp_len1;
         }
 
-        if (tmp_len1 != tmp_len2)
+        if (tmp_len2 > tmp_len1)
         {
-            EmvLog("DOL data length not match(%d != %d)", tmp_len1, tmp_len2);
-            return EMV_ERR_BAD_DATA;
+            // Actual data longer than DOL requires: left-truncate (keep leftmost bytes)
+            EmvLog("DOL tag `0x%X` truncate(%d -> %d bytes)", tag, tmp_len2, tmp_len1);
+        }
+        else if (tmp_len2 < tmp_len1)
+        {
+            // Actual data shorter than DOL requires: left-pad with zeros
+            EmvLog("DOL tag `0x%X` pad(%d -> %d bytes)", tag, tmp_len2, tmp_len1);
+            memmove(data + *data_len + (tmp_len1 - tmp_len2), data + *data_len, tmp_len2);
+            memset(data + *data_len, 0, tmp_len1 - tmp_len2);
         }
 
         // EmvLog("DOL add data `0x%X`(%d bytes) successful", tag, tmp_len1);
