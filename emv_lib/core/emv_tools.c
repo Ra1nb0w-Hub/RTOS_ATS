@@ -559,7 +559,7 @@ int emv_tools_build_dol_data(unsigned short tag, unsigned char *data, size_t *da
         return ret;
     }
 
-    // EmvHexLog("DOL Tag Data", tag_data, tag_data_len);
+    EmvHexLog("DOL Tag Data", tag_data, tag_data_len);
     data_capacity = *data_len;
     offset = 0;
     *data_len = 0;
@@ -591,8 +591,9 @@ int emv_tools_build_dol_data(unsigned short tag, unsigned char *data, size_t *da
         ret = emv_tlv_get(tag, data + *data_len, &tmp_len2);
         if (ret != EMV_OK)
         {
-            EmvLog("emv_tlv_get `0x%X` failed(%d)", tag, ret);
-            return ret;
+            EmvLog("emv_tlv_get `0x%X` not found, fill zeros(%d bytes)", tag, tmp_len1);
+            memset(data + *data_len, 0, tmp_len1);
+            tmp_len2 = tmp_len1;
         }
 
         if (tmp_len1 != tmp_len2)

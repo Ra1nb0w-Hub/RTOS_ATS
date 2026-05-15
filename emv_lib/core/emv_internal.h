@@ -101,7 +101,7 @@ int emv_cmd_internal_authenticate(const unsigned char *dynamic_data, size_t dyna
 int emv_cmd_cardholder_verify(unsigned char *pinblock, size_t pin_block_len, bool plaintext);
 int emv_cmd_get_challenge(unsigned char *challenge, size_t *challenge_len);
 int emv_cmd_get_data(uint16_t tag, unsigned char *value, size_t *value_len);
-int emv_cmd_generate_ac(unsigned char type, const unsigned char *cdol, size_t cdol_len);
+int emv_cmd_generate_ac(unsigned char type, bool cda_request, const unsigned char *cdol, size_t cdol_len);
 int emv_cmd_external_authenticate(const unsigned char *arpc, size_t arpc_len);
 int emv_cmd_issuer_script(const unsigned char *script_cmd, size_t script_cmd_len);
 
@@ -112,13 +112,14 @@ int emv_offline_auth_recover_issuer(const EMVCapk *capk_info, EMVIssuerPublicKey
 int emv_offline_auth_recover_icc(const EMVIssuerPublicKeyInfo *issuer_info, EMVIccPublicKeyInfo *icc_pk);
 int emv_offline_auth_add_record(const unsigned char *data, size_t length);
 int emv_offline_auth_cda(void);
+int emv_offline_auth_cda_verify_sdad(void);
 int emv_offline_auth_dda(void);
 int emv_offline_auth_sda(void);
 int emv_process_restrictions(void);
 int emv_cardholder_verify(void);
 int emv_risk_management(void);
 int emv_action_analysis(bool *need_online);
-int emv_online_complete(const unsigned char *arc, const unsigned char *arpc, size_t arpc_len, const unsigned char *script, size_t script_len);
+int emv_online_complete(const char *arc, const unsigned char *tlv, size_t tlv_len);
 
 #ifdef __cplusplus
 }

@@ -63,21 +63,25 @@ static int _process_issuer_script(const unsigned char *script, size_t script_len
  * @brief 联机交易完成处理
  *
  * @param arc 授权响应码(2字节)，可为NULL表示联机失败
- * @param arpc 发卡行认证数据(ARPC)
- * @param arpc_len 发卡行认证数据长度
- * @param script 发卡行脚本数据(包含Tag 71/72模板)
- * @param script_len 发卡行脚本数据长度
+ * @param tlv 服务器返回的TLV数据(可能包含Tag 91/71/72等)
+ * @param tlv_len TLV数据长度
  *
  * @return EMV_OK 表示成功，否则返回错误码。
  */
-int emv_online_complete(const unsigned char *arc, const unsigned char *arpc, size_t arpc_len, const unsigned char *script, size_t script_len)
+int emv_online_complete(const char *arc, const unsigned char *tlv, size_t tlv_len)
 {
     int ret = EMV_OK;
     unsigned char ac_type = EMV_GAC_TYPE_AAC;
+    const unsigned char *arpc = NULL;
+    size_t arpc_len = 0;
+
+    // 从TLV数据中解析Tag 91(ARPC)
+    if (tlv != NULL && tlv_len > 0)
+        emv_tlv_find_tag(tlv, tlv_len, EMV_TAG_ISSUER_AUTH_DATA, 1, &arpc, &arpc_len);
 
     // Step A: 设置授权响应码(ARC)
     if (arc != NULL)
-        emv_tlv_set(EMV_TAG_AUTH_RESPONSE_CODE, arc, 2);
+        emv_tlv_set(EMV_TAG_AUTH_RESPONSE_CODE, (unsigned char *)arc, 2);
 
     // Step B: 发卡行认证(EXTERNAL AUTHENTICATE)
     if (arpc != NULL && arpc_len > 0)
@@ -95,7 +99,7 @@ int emv_online_complete(const unsigned char *arc, const unsigned char *arpc, siz
     }
 
     // Step C: 处理发卡行脚本模板1(Tag 71) — 在二次GAC之前
-    ret = _process_issuer_script(script, script_len, EMV_TAG_ISSUER_SCRIPT_TEMPLATE_1);
+    ret = _process_issuer_script(tlv, tlv_len, EMV_TAG_ISSUER_SCRIPT_TEMPLATE_1);
     if (ret != EMV_OK)
     {
         EmvLog("Process issuer script template 1 failed(%d)", ret);
@@ -106,12 +110,17 @@ int emv_online_complete(const unsigned char *arc, const unsigned char *arpc, siz
     {
         unsigned char cdol_data[EMV_MAX_TAG_VALUE_LEN] = {0};
         size_t cdol_data_len = sizeof(cdol_data);
+        bool cda_request = false;
 
-        // 判断AC类型：发卡行批准则请求TC，否则请求AAC
-        if (arc != NULL && arc[0] != 'Z')
+        // 判断AC类型：发卡行批准(ARC="00")则请求TC，否则请求AAC
+        if (arc != NULL && arc[0] == '0' && arc[1] == '0')
             ac_type = EMV_GAC_TYPE_TC;
         else
             ac_type = EMV_GAC_TYPE_AAC;
+
+        // 判断是否请求CDA
+        if (g_emv_session.aip.cda && g_emv_session.terminal_capabilities.security.cda && g_emv_session.icc_pk.modulus_len > 0)
+            cda_request = true;
 
         // 构建CDOL2数据，如果CDOL2不存在则使用CDOL1
         ret = emv_tools_build_dol_data(EMV_TAG_CDOL2, cdol_data, &cdol_data_len);
@@ -127,11 +136,22 @@ int emv_online_complete(const unsigned char *arc, const unsigned char *arpc, siz
             }
         }
 
-        ret = emv_cmd_generate_ac(ac_type, cdol_data, cdol_data_len);
+        ret = emv_cmd_generate_ac(ac_type, cda_request, cdol_data, cdol_data_len);
         if (ret != EMV_OK)
         {
             EmvLog("Second GENERATE AC failed(%d)", ret);
             return ret;
+        }
+
+        // CDA验证：验证二次GAC响应中的SDAD
+        if (cda_request)
+        {
+            ret = emv_offline_auth_cda_verify_sdad();
+            if (ret != EMV_OK)
+            {
+                EmvLog("Second GAC CDA verify failed(%d)", ret);
+                g_emv_session.tvr.data_verify_result.cda_failed = 1;
+            }
         }
     }
 
@@ -163,7 +183,7 @@ int emv_online_complete(const unsigned char *arc, const unsigned char *arpc, siz
     }
 
     // Step E: 处理发卡行脚本模板2(Tag 72) — 在二次GAC之后
-    ret = _process_issuer_script(script, script_len, EMV_TAG_ISSUER_SCRIPT_TEMPLATE_2);
+    ret = _process_issuer_script(tlv, tlv_len, EMV_TAG_ISSUER_SCRIPT_TEMPLATE_2);
     if (ret != EMV_OK)
     {
         EmvLog("Process issuer script template 2 failed(%d)", ret);

@@ -400,6 +400,15 @@ int emv_step_offline_authenticate(void)
 
     if (g_emv_session.aip.cda && g_emv_session.terminal_capabilities.security.cda)
     {
+        // 初始化标签初始值
+        {
+            unsigned char zeros[20] = {0};
+
+            emv_tlv_set(EMV_TAG_DATA_AUTH_CODE, zeros, 2);
+            emv_tlv_set(EMV_TAG_ICC_DYNAMIC_NUMBER, zeros, 8);
+            emv_tlv_set(EMV_TAG_MERCHANT_CUSTOM_DATA, zeros, 20);
+        }
+
         ret = emv_offline_auth_cda();
         if (ret != EMV_OK)
         {
@@ -644,20 +653,18 @@ exit:
 
 /**
  * @brief 执行联机完成步骤。
- * 
- * @param arc 终端响应码
- * @param arpc 发卡行认证数据
- * @param arpc_len 发卡行认证数据长度
- * @param script 发卡行脚本(包含Tag 71/72模板)
- * @param script_len 发卡行脚本长度
+ *
+ * @param arc 授权响应码(2字节)，可为NULL表示联机失败
+ * @param tlv 服务器返回的TLV数据(可能包含Tag 91/71/72等)
+ * @param tlv_len TLV数据长度
  *
  * @return EMV_OK 表示成功，否则返回错误码。
  */
-int emv_step_transaction_online_complete(unsigned char *arc, unsigned char *arpc, unsigned int arpc_len, unsigned char *script, unsigned int script_len)
+int emv_step_transaction_online_complete(const char *arc, const unsigned char *tlv, unsigned int tlv_len)
 {
     int ret = EMV_OK;
 
-    ret = emv_online_complete(arc, arpc, (size_t)arpc_len, script, (size_t)script_len);
+    ret = emv_online_complete(arc, tlv, (size_t)tlv_len);
     if (ret != EMV_OK)
     {
         EmvLog("emv_online_complete failed(%d)", ret);

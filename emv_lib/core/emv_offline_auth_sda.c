@@ -206,11 +206,7 @@ int emv_offline_auth_sda(void)
     issuer_info.remainder_len = sizeof(issuer_info.remainder);
     ret = emv_tlv_get(EMV_TAG_ISSUER_PUBLIC_KEY_REMAINDER, issuer_info.remainder, &issuer_info.remainder_len);
     if (ret != EMV_OK)
-    {
-        EmvLog("emv_tlv_get `0x%X` failed(%d)", EMV_TAG_ISSUER_PUBLIC_KEY_REMAINDER, ret);
-        emv_offline_auth_set_tvr(true, false);
-        return ret;
-    }
+        issuer_info.remainder_len = 0;
 
     // 恢复发卡行证书中的公钥信息
     ret = emv_offline_auth_recover_issuer(capk_info, &issuer_info);

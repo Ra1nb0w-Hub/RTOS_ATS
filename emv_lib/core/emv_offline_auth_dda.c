@@ -409,6 +409,18 @@ int emv_offline_auth_dda(void)
         return ret;
     }
 
+    // 提取ICC Dynamic Data中的ICC动态数(9F4C)
+    // recovered_data[3] = Ldd, recovered_data[4] = ICC Dynamic Number Length
+    {
+        unsigned char ldd = recovered_data[3];
+        unsigned char idn_len = recovered_data[4];
+
+        if (ldd >= (1U + idn_len) && idn_len > 0 && (4U + ldd) <= (sdad_len - 21U))
+        {
+            emv_tlv_set(EMV_TAG_ICC_DYNAMIC_NUMBER, recovered_data + 5U, idn_len);
+        }
+    }
+
     g_emv_session.tvr.data_verify_result.not_executed = 0;
     g_emv_session.tvr.data_verify_result.dda_failed = 0;
 

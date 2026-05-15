@@ -114,7 +114,6 @@ static void _check_velocity(void)
                 EmvLog("Skip check velocity: Not found tag `0x%X`", EMV_TAG_LAST_ONLINE_ATC_REGISTER);
                 g_emv_session.tvr.risk_result.exceed_offline_lower_limit = 1;
                 g_emv_session.tvr.risk_result.exceed_offline_upper_limit = 1;
-                g_emv_session.tvr.data_verify_result.card_data_missing = 1;
                 return;
             }
         }
@@ -137,7 +136,6 @@ static void _check_velocity(void)
                 EmvLog("Skip check velocity: Not found tag `0x%X`", EMV_TAG_ATC);
                 g_emv_session.tvr.risk_result.exceed_offline_lower_limit = 1;
                 g_emv_session.tvr.risk_result.exceed_offline_upper_limit = 1;
-                g_emv_session.tvr.data_verify_result.card_data_missing = 1;
                 return;
             }
         }

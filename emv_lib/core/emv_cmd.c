@@ -519,7 +519,7 @@ int emv_cmd_internal_authenticate(const unsigned char *dynamic_data, size_t dyna
  * 
  * @return EMV_OK 表示成功，否则返回错误码。
  */
-int emv_cmd_generate_ac(unsigned char type, const unsigned char *cdol, size_t cdol_len)
+int emv_cmd_generate_ac(unsigned char type, bool cda_request, const unsigned char *cdol, size_t cdol_len)
 {
     int ret = EMV_OK;
     unsigned char command[6 + EMV_MAX_TAG_VALUE_LEN] = {0};
@@ -546,7 +546,7 @@ int emv_cmd_generate_ac(unsigned char type, const unsigned char *cdol, size_t cd
 
     command[0] = 0x80;
     command[1] = 0xAE;
-    command[2] = (unsigned char)((type & 0x03U) << 6);
+    command[2] = (unsigned char)(((type & 0x03U) << 6) | (cda_request ? 0x10U : 0x00U));
     command[3] = 0x00;
     command[4] = (unsigned char)cdol_len;
     if (cdol_len > 0)

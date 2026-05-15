@@ -67,12 +67,15 @@ extern "C" {
 #define EMV_TAG_PDOL                                    (0x9F38U) // 处理选项数据对象列表(PDOL)
 #define EMV_TAG_ADDITIONAL_TERMINAL_CAPABILITIES        (0x9F40U) // 额外终端能力
 #define EMV_TAG_APPLICATION_CURRENCY_CODE               (0x9F42U) // 应用货币代码
+#define EMV_TAG_DATA_AUTH_CODE                          (0x9F45U) // 数据认证码
 #define EMV_TAG_ICC_PUBLIC_KEY_CERTIFICATE              (0x9F46U) // IC卡公钥证书
 #define EMV_TAG_ICC_PUBLIC_KEY_EXPONENT                 (0x9F47U) // IC卡公钥指数
 #define EMV_TAG_ICC_PUBLIC_KEY_REMAINDER                (0x9F48U) // IC卡公钥余数
 #define EMV_TAG_DDOL                                    (0x9F49U) // 动态数据认证数据对象列表(DDOL)
 #define EMV_TAG_SDA_DATA_TAG_LIST                       (0x9F4AU) // 静态数据认证标签列表
 #define EMV_TAG_SDAD                                    (0x9F4BU) // 签名的动态应用数据(SDAD)
+#define EMV_TAG_ICC_DYNAMIC_NUMBER                      (0x9F4CU) // ICC动态数
+#define EMV_TAG_MERCHANT_CUSTOM_DATA                    (0x9F7CU) // 商户自定义数据
 #define EMV_TAG_FCI_DATA                                (0xA5U) // FCI专用模板
 
 #ifdef __cplusplus

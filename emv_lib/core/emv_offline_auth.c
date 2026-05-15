@@ -235,11 +235,11 @@ void emv_offline_auth_set_tvr(bool mark_missing_data, bool card_in_blacklist)
 {
     g_emv_session.tvr.data_verify_result.not_executed = 0;
 
-    if (g_emv_session.aip.cda == 1)
+    if (g_emv_session.aip.cda == 1 && g_emv_session.terminal_capabilities.security.cda == 1)
         g_emv_session.tvr.data_verify_result.cda_failed = 1;
-    else if (g_emv_session.aip.dda == 1)
+    else if (g_emv_session.aip.dda == 1 && g_emv_session.terminal_capabilities.security.dda == 1)
         g_emv_session.tvr.data_verify_result.dda_failed = 1;
-    else if (g_emv_session.aip.sda == 1)
+    else if (g_emv_session.aip.sda == 1 && g_emv_session.terminal_capabilities.security.sda == 1)
         g_emv_session.tvr.data_verify_result.sda_failed = 1;
 
     if (mark_missing_data)

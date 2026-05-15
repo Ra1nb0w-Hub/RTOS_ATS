@@ -205,7 +205,6 @@ static int _process_cvm(EMVCvm *cvm)
 
 Retry:
     EmvLog("Current Process CVM(%02X%02X)", cvm->code, cvm->condition_code);
-    memset(&g_emv_session.tvr.cardholder_verify_result, 0, sizeof(g_emv_session.tvr.cardholder_verify_result));
 
     if (cvm_code.type == TYPE_EXEC_FAILED)
     {
@@ -248,6 +247,7 @@ Retry:
             if (pin_retry_times == 0)
             {
                 EmvLog("CVM(%02X%02X) failed, PIN retry times is 0", cvm->code, cvm->condition_code);
+                g_emv_session.tvr.cardholder_verify_result.pin_retry_limit = 1;
                 ret = EMV_ERR_CVM_FAILED;
                 goto exit;
             }

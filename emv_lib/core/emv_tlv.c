@@ -121,10 +121,7 @@ int emv_tlv_parse_tag(const unsigned char *data, size_t length, size_t *offset, 
     }
 
     if (*offset >= length)
-    {
-        EmvLog("Parameter `offset` is %d, but max is %d", *offset, length);
         return EMV_ERR_INVALID_PARAM;
-    }
 
     if (tag_out == NULL)
     {
@@ -188,10 +185,7 @@ int emv_tlv_parse_length(const unsigned char *data, size_t length, size_t *offse
     }
 
     if (*offset >= length)
-    {
-        EmvLog("Parameter `offset` is %d, but max is %d", *offset, length);
         return EMV_ERR_INVALID_PARAM;
-    }
 
     if (value_length_out == NULL)
     {

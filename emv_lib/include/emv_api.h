@@ -41,7 +41,7 @@ int emv_step_transaction_begin(const EMVTransactionRequest *request);
 // 交易处理
 int emv_step_transaction_process(bool *need_online);
 // 交易联机完成
-int emv_step_transaction_online_complete(unsigned char *arc, unsigned char *arpc, unsigned int arpc_len, unsigned char *script, unsigned int script_len);
+int emv_step_transaction_online_complete(const char *arc, const unsigned char *tlv, unsigned int tlv_len);
 // 结束交易
 int emv_step_transaction_end(void);
 

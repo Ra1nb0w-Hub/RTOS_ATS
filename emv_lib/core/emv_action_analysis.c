@@ -90,6 +90,11 @@ int emv_action_analysis(bool *need_online)
     {
         unsigned char cdol_data[EMV_MAX_TAG_VALUE_LEN] = {0};
         size_t cdol_data_len = sizeof(cdol_data);
+        bool cda_request = false;
+
+        // 判断是否请求CDA：AIP和终端均支持CDA，且ICC公钥已恢复
+        if (g_emv_session.aip.cda && g_emv_session.terminal_capabilities.security.cda && g_emv_session.icc_pk.modulus_len > 0)
+            cda_request = true;
 
         // 构建CDOL1数据
         ret = emv_tools_build_dol_data(EMV_TAG_CDOL1, cdol_data, &cdol_data_len);
@@ -100,11 +105,22 @@ int emv_action_analysis(bool *need_online)
         }
 
         // 生成应用密文
-        ret = emv_cmd_generate_ac(ac_type, cdol_data, cdol_data_len);
+        ret = emv_cmd_generate_ac(ac_type, cda_request, cdol_data, cdol_data_len);
         if (ret != EMV_OK)
         {
             EmvLog("emv_cmd_generate_ac failed(%d)", ret);
             return ret;
+        }
+
+        // CDA验证：验证GAC响应中的SDAD
+        if (cda_request)
+        {
+            ret = emv_offline_auth_cda_verify_sdad();
+            if (ret != EMV_OK)
+            {
+                EmvLog("emv_offline_auth_cda_verify_sdad failed(%d)", ret);
+                g_emv_session.tvr.data_verify_result.cda_failed = 1;
+            }
         }
 
         g_emv_session.tsi.card_risk_management = 1;
