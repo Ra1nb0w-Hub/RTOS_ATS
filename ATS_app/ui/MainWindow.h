@@ -8,6 +8,12 @@
 #include <QPushButton>
 #include <QDomElement>
 #include <QListWidgetItem>
+#include "ScreenPanel.h"
+#include "ButtonsPanel.h"
+#include "TestCasesPanel.h"
+#include "StatusPanel.h"
+#include "LogPanel.h"
+#include "ReceiptPanel.h"
 #include "core/TestRunner.h"
 #include "core/KeySimulator.h"
 #include "core/AppThread.h"
@@ -74,11 +80,6 @@ QT_END_NAMESPACE
 
 /**
  * @brief 主窗口
- *
- * 布局分三个区域：
- *  - 左侧：虚拟设备屏幕 + 按键 + 测试用例
- *  - 中间：设备状态区 + 小票预览区
- *  - 右侧：日志输出区，实时显示日志
  */
 class MainWindow : public QMainWindow
 {
@@ -134,6 +135,7 @@ private:
     void updateScreenDisplay();
     void flushPendingLogs();
     void updateStatusPanel();
+    void showReceiptPanel();
 
     // 配置导入相关
     bool loadConfigFromFile(const QString &filePath);
@@ -151,6 +153,12 @@ protected:
     TestRunner     *m_runner;
     LogManager     *m_logManager;
     AppThread      *m_appThread;
+    ScreenPanel    *m_screenPanel = nullptr;
+    ButtonsPanel   *m_buttonsPanel = nullptr;
+    TestCasesPanel *m_testCasesPanel = nullptr;
+    StatusPanel    *m_statusPanel = nullptr;
+    LogPanel       *m_logPanel = nullptr;
+    ReceiptPanel   *m_receiptPanel = nullptr;
     QTimer         m_screenTimer;
     QTimer         m_logFlushTimer;
     QTimer         m_statusTimer;

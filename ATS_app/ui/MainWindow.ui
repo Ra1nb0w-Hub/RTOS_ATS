@@ -6,36 +6,30 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>1200</width>
-    <height>588</height>
+    <width>1400</width>
+    <height>900</height>
    </rect>
   </property>
   <property name="minimumSize">
    <size>
-    <width>0</width>
-    <height>0</height>
+    <width>1400</width>
+    <height>900</height>
    </size>
   </property>
   <property name="maximumSize">
    <size>
     <width>16777215</width>
-    <height>588</height>
+    <height>16777215</height>
    </size>
   </property>
   <widget class="QWidget" name="centralWidget">
    <property name="minimumSize">
     <size>
-     <width>1200</width>
-     <height>588</height>
+     <width>0</width>
+     <height>0</height>
     </size>
    </property>
-   <property name="maximumSize">
-    <size>
-     <width>16777215</width>
-     <height>16777215</height>
-    </size>
-   </property>
-   <layout class="QHBoxLayout" name="horizontalLayout_main">
+   <layout class="QVBoxLayout" name="horizontalLayout_main">
     <property name="spacing">
      <number>8</number>
     </property>
@@ -52,1011 +46,14 @@
      <number>8</number>
     </property>
     <item>
-     <layout class="QVBoxLayout" name="verticalLayout_left">
-      <property name="spacing">
-       <number>6</number>
-      </property>
-      <property name="sizeConstraint">
-       <enum>QLayout::SizeConstraint::SetDefaultConstraint</enum>
-      </property>
+     <layout class="QHBoxLayout" name="horizontalLayout">
       <item>
-       <widget class="QGroupBox" name="groupBoxScreen">
-        <property name="minimumSize">
-         <size>
-          <width>334</width>
-          <height>0</height>
-         </size>
+       <layout class="QVBoxLayout" name="verticalLayout_left">
+        <property name="spacing">
+         <number>6</number>
         </property>
-        <property name="maximumSize">
-         <size>
-          <width>334</width>
-          <height>16777215</height>
-         </size>
-        </property>
-        <property name="styleSheet">
-         <string notr="true">QGroupBox { border: 1px solid #546e7a; border-radius: 4px; margin-top: 8px; } QGroupBox::title { subcontrol-origin: margin; left: 10px; padding: 0 4px; }</string>
-        </property>
-        <property name="title">
-         <string>屏幕</string>
-        </property>
-        <layout class="QVBoxLayout" name="verticalLayout_screen">
-         <property name="spacing">
-          <number>0</number>
-         </property>
-         <property name="leftMargin">
-          <number>6</number>
-         </property>
-         <property name="topMargin">
-          <number>6</number>
-         </property>
-         <property name="rightMargin">
-          <number>6</number>
-         </property>
-         <property name="bottomMargin">
-          <number>6</number>
-         </property>
-         <item>
-          <widget class="QLabel" name="labelScreen">
-           <property name="sizePolicy">
-            <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
-             <horstretch>0</horstretch>
-             <verstretch>0</verstretch>
-            </sizepolicy>
-           </property>
-           <property name="minimumSize">
-            <size>
-             <width>320</width>
-             <height>240</height>
-            </size>
-           </property>
-           <property name="maximumSize">
-            <size>
-             <width>320</width>
-             <height>240</height>
-            </size>
-           </property>
-           <property name="styleSheet">
-            <string notr="true"/>
-           </property>
-           <property name="text">
-            <string>[ No Signal ]</string>
-           </property>
-           <property name="alignment">
-            <set>Qt::AlignmentFlag::AlignCenter</set>
-           </property>
-          </widget>
-         </item>
-        </layout>
-       </widget>
-      </item>
-      <item>
-       <widget class="QGroupBox" name="groupBoxDeviceButtons">
-        <property name="minimumSize">
-         <size>
-          <width>334</width>
-          <height>0</height>
-         </size>
-        </property>
-        <property name="maximumSize">
-         <size>
-          <width>334</width>
-          <height>16777215</height>
-         </size>
-        </property>
-        <property name="styleSheet">
-         <string notr="true">QGroupBox { border: 1px solid #546e7a; border-radius: 4px; margin-top: 8px; } QGroupBox::title { subcontrol-origin: margin; left: 10px; padding: 0 4px; }</string>
-        </property>
-        <property name="title">
-         <string>按键</string>
-        </property>
-        <layout class="QHBoxLayout" name="horizontalLayout_deviceButtons">
-         <property name="spacing">
-          <number>6</number>
-         </property>
-         <property name="leftMargin">
-          <number>6</number>
-         </property>
-         <property name="topMargin">
-          <number>6</number>
-         </property>
-         <property name="rightMargin">
-          <number>6</number>
-         </property>
-         <property name="bottomMargin">
-          <number>6</number>
-         </property>
-         <item>
-          <widget class="QPushButton" name="btnDevicePower">
-           <property name="minimumSize">
-            <size>
-             <width>0</width>
-             <height>0</height>
-            </size>
-           </property>
-           <property name="maximumSize">
-            <size>
-             <width>16777215</width>
-             <height>16777215</height>
-            </size>
-           </property>
-           <property name="styleSheet">
-            <string>QPushButton { background-color: #37474f; color: #eceff1; border: 1px solid #546e7a; border-radius: 6px; font-size: 11px; font-weight: bold; padding: 4px 8px; } QPushButton:hover { background-color: #455a64; } QPushButton:pressed { background-color: #263238; }</string>
-           </property>
-           <property name="text">
-            <string>电源</string>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <widget class="QPushButton" name="btnDeviceVolUp">
-           <property name="minimumSize">
-            <size>
-             <width>0</width>
-             <height>0</height>
-            </size>
-           </property>
-           <property name="maximumSize">
-            <size>
-             <width>16777215</width>
-             <height>16777215</height>
-            </size>
-           </property>
-           <property name="styleSheet">
-            <string>QPushButton { background-color: #37474f; color: #eceff1; border: 1px solid #546e7a; border-radius: 6px; font-size: 11px; font-weight: bold; padding: 4px 8px; } QPushButton:hover { background-color: #455a64; } QPushButton:pressed { background-color: #263238; }</string>
-           </property>
-           <property name="text">
-            <string>音量加</string>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <widget class="QPushButton" name="btnDeviceVolDown">
-           <property name="minimumSize">
-            <size>
-             <width>0</width>
-             <height>0</height>
-            </size>
-           </property>
-           <property name="maximumSize">
-            <size>
-             <width>16777215</width>
-             <height>16777215</height>
-            </size>
-           </property>
-           <property name="styleSheet">
-            <string>QPushButton { background-color: #37474f; color: #eceff1; border: 1px solid #546e7a; border-radius: 6px; font-size: 11px; font-weight: bold; padding: 4px 8px; } QPushButton:hover { background-color: #455a64; } QPushButton:pressed { background-color: #263238; }</string>
-           </property>
-           <property name="text">
-            <string>音量减</string>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <widget class="QPushButton" name="btnDeviceMenu">
-           <property name="minimumSize">
-            <size>
-             <width>0</width>
-             <height>0</height>
-            </size>
-           </property>
-           <property name="maximumSize">
-            <size>
-             <width>16777215</width>
-             <height>16777215</height>
-            </size>
-           </property>
-           <property name="styleSheet">
-            <string>QPushButton { background-color: #37474f; color: #eceff1; border: 1px solid #546e7a; border-radius: 6px; font-size: 11px; font-weight: bold; padding: 4px 8px; } QPushButton:hover { background-color: #455a64; } QPushButton:pressed { background-color: #263238; }</string>
-           </property>
-           <property name="text">
-            <string>菜单</string>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <widget class="QPushButton" name="btnDeviceReplay">
-           <property name="minimumSize">
-            <size>
-             <width>0</width>
-             <height>0</height>
-            </size>
-           </property>
-           <property name="maximumSize">
-            <size>
-             <width>16777215</width>
-             <height>16777215</height>
-            </size>
-           </property>
-           <property name="styleSheet">
-            <string>QPushButton { background-color: #37474f; color: #eceff1; border: 1px solid #546e7a; border-radius: 6px; font-size: 11px; font-weight: bold; padding: 4px 8px; } QPushButton:hover { background-color: #455a64; } QPushButton:pressed { background-color: #263238; }</string>
-           </property>
-           <property name="text">
-            <string>重放</string>
-           </property>
-          </widget>
-         </item>
-        </layout>
-       </widget>
-      </item>
-      <item>
-       <widget class="QGroupBox" name="groupBoxTestCases">
-        <property name="minimumSize">
-         <size>
-          <width>334</width>
-          <height>0</height>
-         </size>
-        </property>
-        <property name="maximumSize">
-         <size>
-          <width>334</width>
-          <height>262</height>
-         </size>
-        </property>
-        <property name="styleSheet">
-         <string notr="true">QGroupBox { border: 1px solid #546e7a; border-radius: 4px; margin-top: 8px; } QGroupBox::title { subcontrol-origin: margin; left: 10px; padding: 0 4px; }</string>
-        </property>
-        <property name="title">
-         <string>用例</string>
-        </property>
-        <layout class="QVBoxLayout" name="verticalLayout_cases">
-         <property name="spacing">
-          <number>6</number>
-         </property>
-         <property name="leftMargin">
-          <number>6</number>
-         </property>
-         <property name="topMargin">
-          <number>6</number>
-         </property>
-         <property name="rightMargin">
-          <number>6</number>
-         </property>
-         <property name="bottomMargin">
-          <number>6</number>
-         </property>
-         <item>
-          <layout class="QHBoxLayout" name="horizontalLayout_search">
-           <property name="spacing">
-            <number>6</number>
-           </property>
-           <item>
-            <widget class="QLineEdit" name="lineEditSearch">
-             <property name="minimumSize">
-              <size>
-               <width>0</width>
-               <height>0</height>
-              </size>
-             </property>
-             <property name="maximumSize">
-              <size>
-               <width>16777215</width>
-               <height>16777215</height>
-              </size>
-             </property>
-             <property name="placeholderText">
-              <string>输入内容自动筛选测试用例</string>
-             </property>
-            </widget>
-           </item>
-           <item>
-            <widget class="QPushButton" name="btnImportConfig">
-             <property name="toolTip">
-              <string>导入JSON配置文件（仅支持cases字段）</string>
-             </property>
-             <property name="styleSheet">
-              <string>QPushButton { background-color: #6c757d; color: white; border-radius: 4px; padding: 4px 8px; } QPushButton:hover { background-color: #5a6268; } QPushButton:pressed { background-color: #545b62; }</string>
-             </property>
-             <property name="text">
-              <string>📁 导入配置</string>
-             </property>
-             <property name="iconSize">
-              <size>
-               <width>14</width>
-               <height>14</height>
-              </size>
-             </property>
-            </widget>
-           </item>
-          </layout>
-         </item>
-         <item>
-          <widget class="QListWidget" name="listWidgetCases">
-           <property name="minimumSize">
-            <size>
-             <width>0</width>
-             <height>0</height>
-            </size>
-           </property>
-           <property name="maximumSize">
-            <size>
-             <width>16777215</width>
-             <height>16777215</height>
-            </size>
-           </property>
-           <property name="selectionMode">
-            <enum>QAbstractItemView::SelectionMode::ExtendedSelection</enum>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <layout class="QHBoxLayout" name="horizontalLayout_buttons">
-           <item>
-            <widget class="QPushButton" name="btnRunSelected">
-             <property name="styleSheet">
-              <string>QPushButton { background-color: #2e7d32; color: white; border-radius: 4px; padding: 6px 12px; } QPushButton:hover { background-color: #388e3c; } QPushButton:pressed { background-color: #1b5e20; }</string>
-             </property>
-             <property name="text">
-              <string>执行选择的用例</string>
-             </property>
-            </widget>
-           </item>
-           <item>
-            <widget class="QPushButton" name="btnRunAll">
-             <property name="styleSheet">
-              <string>QPushButton { background-color: #1565c0; color: white; border-radius: 4px; padding: 6px 12px; } QPushButton:hover { background-color: #1976d2; } QPushButton:pressed { background-color: #0d47a1; }</string>
-             </property>
-             <property name="text">
-              <string>执行全部用例</string>
-             </property>
-            </widget>
-           </item>
-           <item>
-            <widget class="QPushButton" name="btnStop">
-             <property name="enabled">
-              <bool>false</bool>
-             </property>
-             <property name="styleSheet">
-              <string>QPushButton { background-color: #c62828; color: white; border-radius: 4px; padding: 6px 12px; } QPushButton:hover { background-color: #d32f2f; } QPushButton:pressed { background-color: #b71c1c; } QPushButton:disabled { background-color: #555; }</string>
-             </property>
-             <property name="text">
-              <string>停止测试</string>
-             </property>
-            </widget>
-           </item>
-          </layout>
-         </item>
-        </layout>
-       </widget>
-      </item>
-     </layout>
-    </item>
-    <item>
-     <layout class="QVBoxLayout" name="verticalLayout_middleRight">
-      <property name="spacing">
-       <number>6</number>
-      </property>
-      <item>
-       <widget class="QGroupBox" name="groupBoxStatus">
-        <property name="minimumSize">
-         <size>
-          <width>300</width>
-          <height>0</height>
-         </size>
-        </property>
-        <property name="maximumSize">
-         <size>
-          <width>300</width>
-          <height>16777215</height>
-         </size>
-        </property>
-        <property name="styleSheet">
-         <string notr="true">QGroupBox { border: 1px solid #546e7a; border-radius: 4px; margin-top: 8px; } QGroupBox::title { subcontrol-origin: margin; left: 10px; padding: 0 4px; }</string>
-        </property>
-        <property name="title">
-         <string>状态</string>
-        </property>
-        <layout class="QVBoxLayout" name="verticalLayout_status">
-         <property name="spacing">
-          <number>0</number>
-         </property>
-         <property name="leftMargin">
-          <number>6</number>
-         </property>
-         <property name="topMargin">
-          <number>6</number>
-         </property>
-         <property name="rightMargin">
-          <number>6</number>
-         </property>
-         <property name="bottomMargin">
-          <number>6</number>
-         </property>
-         <item>
-          <layout class="QGridLayout" name="gridLayout_status">
-           <property name="horizontalSpacing">
-            <number>6</number>
-           </property>
-           <property name="verticalSpacing">
-            <number>2</number>
-           </property>
-           <item row="2" column="0" colspan="2">
-            <widget class="QLabel" name="label_wifi_ssid">
-             <property name="font">
-              <font>
-               <family>Microsoft YaHei UI</family>
-               <pointsize>-1</pointsize>
-              </font>
-             </property>
-             <property name="styleSheet">
-              <string notr="true">QLabel { color: #d0d0d0; font-size: 13px; font-family: &quot;Microsoft YaHei UI&quot;, &quot;微软雅黑&quot;, sans-serif; }</string>
-             </property>
-             <property name="text">
-              <string notr="true">&lt;span style='color:#bbbbbb;'&gt;WiFi热点名称：&lt;/span&gt;&lt;span style='color:#f0f0f0;'&gt;--&lt;/span&gt;</string>
-             </property>
-            </widget>
-           </item>
-           <item row="11" column="0">
-            <widget class="QLabel" name="label_printer_paper_status">
-             <property name="font">
-              <font>
-               <family>Microsoft YaHei UI</family>
-               <pointsize>-1</pointsize>
-              </font>
-             </property>
-             <property name="styleSheet">
-              <string notr="true">QLabel { color: #d0d0d0; font-size: 13px; font-family: &quot;Microsoft YaHei UI&quot;, &quot;微软雅黑&quot;, sans-serif; }</string>
-             </property>
-             <property name="text">
-              <string notr="true">&lt;span style='color:#bbbbbb;'&gt;纸张状态：&lt;/span&gt;&lt;span style='color:#f0f0f0;'&gt;--&lt;/span&gt;</string>
-             </property>
-            </widget>
-           </item>
-           <item row="10" column="1">
-            <widget class="QLabel" name="label_connection_count">
-             <property name="font">
-              <font>
-               <family>Microsoft YaHei UI</family>
-               <pointsize>-1</pointsize>
-              </font>
-             </property>
-             <property name="styleSheet">
-              <string notr="true">QLabel { color: #d0d0d0; font-size: 13px; font-family: &quot;Microsoft YaHei UI&quot;, &quot;微软雅黑&quot;, sans-serif; }</string>
-             </property>
-             <property name="text">
-              <string notr="true">&lt;span style='color:#bbbbbb;'&gt;网络链接数量：&lt;/span&gt;&lt;span style='color:#f0f0f0;'&gt;--&lt;/span&gt;</string>
-             </property>
-            </widget>
-           </item>
-           <item row="9" column="1">
-            <widget class="QLabel" name="label_audio_status">
-             <property name="font">
-              <font>
-               <family>Microsoft YaHei UI</family>
-               <pointsize>-1</pointsize>
-              </font>
-             </property>
-             <property name="styleSheet">
-              <string notr="true">QLabel { color: #d0d0d0; font-size: 13px; font-family: &quot;Microsoft YaHei UI&quot;, &quot;微软雅黑&quot;, sans-serif; }</string>
-             </property>
-             <property name="text">
-              <string notr="true">&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; color:#bbbbbb;&quot;&gt;音频播放状态：&lt;/span&gt;&lt;span style=&quot; color:#f0f0f0;&quot;&gt;--&lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
-             </property>
-            </widget>
-           </item>
-           <item row="4" column="0">
-            <widget class="QLabel" name="label_cellular_mnc">
-             <property name="font">
-              <font>
-               <family>Microsoft YaHei UI</family>
-               <pointsize>-1</pointsize>
-              </font>
-             </property>
-             <property name="styleSheet">
-              <string notr="true">QLabel { color: #d0d0d0; font-size: 13px; font-family: &quot;Microsoft YaHei UI&quot;, &quot;微软雅黑&quot;, sans-serif; }</string>
-             </property>
-             <property name="text">
-              <string notr="true">&lt;span style='color:#bbbbbb;'&gt;蜂窝MNC：&lt;/span&gt;&lt;span style='color:#f0f0f0;'&gt;--&lt;/span&gt;</string>
-             </property>
-            </widget>
-           </item>
-           <item row="3" column="0">
-            <widget class="QLabel" name="label_wifi_signal">
-             <property name="font">
-              <font>
-               <family>Microsoft YaHei UI</family>
-               <pointsize>-1</pointsize>
-              </font>
-             </property>
-             <property name="styleSheet">
-              <string notr="true">QLabel { color: #d0d0d0; font-size: 13px; font-family: &quot;Microsoft YaHei UI&quot;, &quot;微软雅黑&quot;, sans-serif; }</string>
-             </property>
-             <property name="text">
-              <string notr="true">&lt;span style='color:#bbbbbb;'&gt;WiFi信号强度：&lt;/span&gt;&lt;span style='color:#f0f0f0;'&gt;--&lt;/span&gt;</string>
-             </property>
-            </widget>
-           </item>
-           <item row="7" column="0" colspan="2">
-            <widget class="QLabel" name="label_cellular_imei">
-             <property name="font">
-              <font>
-               <family>Microsoft YaHei UI</family>
-               <pointsize>-1</pointsize>
-              </font>
-             </property>
-             <property name="styleSheet">
-              <string notr="true">QLabel { color: #d0d0d0; font-size: 13px; font-family: &quot;Microsoft YaHei UI&quot;, &quot;微软雅黑&quot;, sans-serif; }</string>
-             </property>
-             <property name="text">
-              <string notr="true">&lt;span style='color:#bbbbbb;'&gt;蜂窝IMEI：&lt;/span&gt;&lt;span style='color:#f0f0f0;'&gt;--&lt;/span&gt;</string>
-             </property>
-            </widget>
-           </item>
-           <item row="0" column="1">
-            <widget class="QLabel" name="label_net_status">
-             <property name="font">
-              <font>
-               <family>Microsoft YaHei UI</family>
-               <pointsize>-1</pointsize>
-              </font>
-             </property>
-             <property name="styleSheet">
-              <string notr="true">QLabel { color: #d0d0d0; font-size: 13px; font-family: &quot;Microsoft YaHei UI&quot;, &quot;微软雅黑&quot;, sans-serif; }</string>
-             </property>
-             <property name="text">
-              <string notr="true">&lt;span style='color:#bbbbbb;'&gt;网络状态：&lt;/span&gt;&lt;span style='color:#f0f0f0;'&gt;--&lt;/span&gt;</string>
-             </property>
-            </widget>
-           </item>
-           <item row="1" column="0">
-            <widget class="QLabel" name="label_net_type">
-             <property name="font">
-              <font>
-               <family>Microsoft YaHei UI</family>
-               <pointsize>-1</pointsize>
-              </font>
-             </property>
-             <property name="styleSheet">
-              <string notr="true">QLabel { color: #d0d0d0; font-size: 13px; font-family: &quot;Microsoft YaHei UI&quot;, &quot;微软雅黑&quot;, sans-serif; }</string>
-             </property>
-             <property name="text">
-              <string notr="true">&lt;span style='color:#bbbbbb;'&gt;网络类型：&lt;/span&gt;&lt;span style='color:#f0f0f0;'&gt;--&lt;/span&gt;</string>
-             </property>
-            </widget>
-           </item>
-           <item row="0" column="0">
-            <widget class="QLabel" name="label_app_status">
-             <property name="font">
-              <font>
-               <family>Microsoft YaHei UI</family>
-               <pointsize>-1</pointsize>
-              </font>
-             </property>
-             <property name="styleSheet">
-              <string notr="true">QLabel { color: #d0d0d0; font-size: 13px; font-family: &quot;Microsoft YaHei UI&quot;, &quot;微软雅黑&quot;, sans-serif; }</string>
-             </property>
-             <property name="text">
-              <string notr="true">&lt;span style='color:#bbbbbb;'&gt;程序状态：&lt;/span&gt;&lt;span style='color:#f0f0f0;'&gt;--&lt;/span&gt;</string>
-             </property>
-            </widget>
-           </item>
-           <item row="8" column="0" colspan="2">
-            <widget class="QLabel" name="label_serial_number">
-             <property name="font">
-              <font>
-               <family>Microsoft YaHei UI</family>
-               <pointsize>-1</pointsize>
-              </font>
-             </property>
-             <property name="styleSheet">
-              <string notr="true">QLabel { color: #d0d0d0; font-size: 13px; font-family: &quot;Microsoft YaHei UI&quot;, &quot;微软雅黑&quot;, sans-serif; }</string>
-             </property>
-             <property name="text">
-              <string notr="true">&lt;span style='color:#bbbbbb;'&gt;序列号：&lt;/span&gt;&lt;span style='color:#f0f0f0;'&gt;--&lt;/span&gt;</string>
-             </property>
-            </widget>
-           </item>
-           <item row="6" column="0" colspan="2">
-            <widget class="QLabel" name="label_cellular_imsi">
-             <property name="font">
-              <font>
-               <family>Microsoft YaHei UI</family>
-               <pointsize>-1</pointsize>
-              </font>
-             </property>
-             <property name="styleSheet">
-              <string notr="true">QLabel { color: #d0d0d0; font-size: 13px; font-family: &quot;Microsoft YaHei UI&quot;, &quot;微软雅黑&quot;, sans-serif; }</string>
-             </property>
-             <property name="text">
-              <string notr="true">&lt;span style='color:#bbbbbb;'&gt;蜂窝IMSI：&lt;/span&gt;&lt;span style='color:#f0f0f0;'&gt;--&lt;/span&gt;</string>
-             </property>
-            </widget>
-           </item>
-           <item row="10" column="0">
-            <widget class="QLabel" name="label_audio_queue_count">
-             <property name="font">
-              <font>
-               <family>Microsoft YaHei UI</family>
-               <pointsize>-1</pointsize>
-              </font>
-             </property>
-             <property name="styleSheet">
-              <string notr="true">QLabel { color: #d0d0d0; font-size: 13px; font-family: &quot;Microsoft YaHei UI&quot;, &quot;微软雅黑&quot;, sans-serif; }</string>
-             </property>
-             <property name="text">
-              <string notr="true">&lt;span style='color:#bbbbbb;'&gt;音频队列数量：&lt;/span&gt;&lt;span style='color:#f0f0f0;'&gt;--&lt;/span&gt;</string>
-             </property>
-            </widget>
-           </item>
-           <item row="3" column="1">
-            <widget class="QLabel" name="label_cellular_mcc">
-             <property name="font">
-              <font>
-               <family>Microsoft YaHei UI</family>
-               <pointsize>-1</pointsize>
-              </font>
-             </property>
-             <property name="styleSheet">
-              <string notr="true">QLabel { color: #d0d0d0; font-size: 13px; font-family: &quot;Microsoft YaHei UI&quot;, &quot;微软雅黑&quot;, sans-serif; }</string>
-             </property>
-             <property name="text">
-              <string notr="true">&lt;span style='color:#bbbbbb;'&gt;蜂窝MCC：&lt;/span&gt;&lt;span style='color:#f0f0f0;'&gt;--&lt;/span&gt;</string>
-             </property>
-            </widget>
-           </item>
-           <item row="5" column="1">
-            <widget class="QLabel" name="label_cellular_signal">
-             <property name="font">
-              <font>
-               <family>Microsoft YaHei UI</family>
-               <pointsize>-1</pointsize>
-              </font>
-             </property>
-             <property name="styleSheet">
-              <string notr="true">QLabel { color: #d0d0d0; font-size: 13px; font-family: &quot;Microsoft YaHei UI&quot;, &quot;微软雅黑&quot;, sans-serif; }</string>
-             </property>
-             <property name="text">
-              <string notr="true">&lt;span style='color:#bbbbbb;'&gt;蜂窝信号强度：&lt;/span&gt;&lt;span style='color:#f0f0f0;'&gt;--&lt;/span&gt;</string>
-             </property>
-            </widget>
-           </item>
-           <item row="4" column="1">
-            <widget class="QLabel" name="label_cellular_lac">
-             <property name="font">
-              <font>
-               <family>Microsoft YaHei UI</family>
-               <pointsize>-1</pointsize>
-              </font>
-             </property>
-             <property name="styleSheet">
-              <string notr="true">QLabel { color: #d0d0d0; font-size: 13px; font-family: &quot;Microsoft YaHei UI&quot;, &quot;微软雅黑&quot;, sans-serif; }</string>
-             </property>
-             <property name="text">
-              <string notr="true">&lt;span style='color:#bbbbbb;'&gt;蜂窝LAC：&lt;/span&gt;&lt;span style='color:#f0f0f0;'&gt;--&lt;/span&gt;</string>
-             </property>
-            </widget>
-           </item>
-           <item row="1" column="1">
-            <widget class="QLabel" name="label_wifi_module_status">
-             <property name="font">
-              <font>
-               <family>Microsoft YaHei UI</family>
-               <pointsize>-1</pointsize>
-              </font>
-             </property>
-             <property name="styleSheet">
-              <string notr="true">QLabel { color: #d0d0d0; font-size: 13px; font-family: &quot;Microsoft YaHei UI&quot;, &quot;微软雅黑&quot;, sans-serif; }</string>
-             </property>
-             <property name="text">
-              <string notr="true">&lt;span style='color:#bbbbbb;'&gt;WiFi模块状态：&lt;/span&gt;&lt;span style='color:#f0f0f0;'&gt;--&lt;/span&gt;</string>
-             </property>
-            </widget>
-           </item>
-           <item row="5" column="0">
-            <widget class="QLabel" name="label_cellular_cid">
-             <property name="font">
-              <font>
-               <family>Microsoft YaHei UI</family>
-               <pointsize>-1</pointsize>
-              </font>
-             </property>
-             <property name="styleSheet">
-              <string notr="true">QLabel { color: #d0d0d0; font-size: 13px; font-family: &quot;Microsoft YaHei UI&quot;, &quot;微软雅黑&quot;, sans-serif; }</string>
-             </property>
-             <property name="text">
-              <string notr="true">&lt;span style='color:#bbbbbb;'&gt;蜂窝CID：&lt;/span&gt;&lt;span style='color:#f0f0f0;'&gt;--&lt;/span&gt;</string>
-             </property>
-            </widget>
-           </item>
-           <item row="9" column="0">
-            <widget class="QLabel" name="label_volume">
-             <property name="font">
-              <font>
-               <family>Microsoft YaHei UI</family>
-               <pointsize>-1</pointsize>
-              </font>
-             </property>
-             <property name="styleSheet">
-              <string notr="true">QLabel { color: #d0d0d0; font-size: 13px; font-family: &quot;Microsoft YaHei UI&quot;, &quot;微软雅黑&quot;, sans-serif; }</string>
-             </property>
-             <property name="text">
-              <string notr="true">&lt;span style='color:#bbbbbb;'&gt;音频音量：&lt;/span&gt;&lt;span style='color:#f0f0f0;'&gt;--&lt;/span&gt;</string>
-             </property>
-            </widget>
-           </item>
-          </layout>
-         </item>
-        </layout>
-       </widget>
-      </item>
-      <item>
-       <widget class="QGroupBox" name="groupBoxReceipt">
-        <property name="minimumSize">
-         <size>
-          <width>300</width>
-          <height>0</height>
-         </size>
-        </property>
-        <property name="maximumSize">
-         <size>
-          <width>300</width>
-          <height>16777215</height>
-         </size>
-        </property>
-        <property name="styleSheet">
-         <string notr="true">QGroupBox { border: 1px solid #546e7a; border-radius: 4px; margin-top: 8px; } QGroupBox::title { subcontrol-origin: margin; left: 10px; padding: 0 4px; }</string>
-        </property>
-        <property name="title">
-         <string>小票</string>
-        </property>
-        <layout class="QVBoxLayout" name="verticalLayout_receipt">
-         <property name="spacing">
-          <number>6</number>
-         </property>
-         <property name="leftMargin">
-          <number>6</number>
-         </property>
-         <property name="topMargin">
-          <number>6</number>
-         </property>
-         <property name="rightMargin">
-          <number>6</number>
-         </property>
-         <property name="bottomMargin">
-          <number>6</number>
-         </property>
-         <item>
-          <widget class="QScrollArea" name="scrollAreaReceipt">
-           <property name="maximumSize">
-            <size>
-             <width>16777215</width>
-             <height>16777215</height>
-            </size>
-           </property>
-           <property name="styleSheet">
-            <string notr="true">QScrollArea { border: 1px solid #bbb; border-radius: 4px; }
-QScrollBar:vertical { background: #f0f0f0; width: 10px; border-radius: 5px; } QScrollBar::handle:vertical { background: #aaa; border-radius: 5px; min-height: 20px; } QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }</string>
-           </property>
-           <property name="verticalScrollBarPolicy">
-            <enum>Qt::ScrollBarPolicy::ScrollBarAlwaysOff</enum>
-           </property>
-           <property name="horizontalScrollBarPolicy">
-            <enum>Qt::ScrollBarPolicy::ScrollBarAlwaysOff</enum>
-           </property>
-           <property name="widgetResizable">
-            <bool>false</bool>
-           </property>
-           <widget class="QWidget" name="scrollAreaReceiptContents">
-            <property name="geometry">
-             <rect>
-              <x>0</x>
-              <y>0</y>
-              <width>310</width>
-              <height>50</height>
-             </rect>
-            </property>
-            <property name="sizePolicy">
-             <sizepolicy hsizetype="Minimum" vsizetype="Minimum">
-              <horstretch>0</horstretch>
-              <verstretch>0</verstretch>
-             </sizepolicy>
-            </property>
-            <property name="minimumSize">
-             <size>
-              <width>310</width>
-              <height>50</height>
-             </size>
-            </property>
-            <property name="maximumSize">
-             <size>
-              <width>0</width>
-              <height>0</height>
-             </size>
-            </property>
-            <layout class="QVBoxLayout" name="verticalLayout_receiptContents">
-             <property name="spacing">
-              <number>5</number>
-             </property>
-             <property name="leftMargin">
-              <number>0</number>
-             </property>
-             <property name="topMargin">
-              <number>0</number>
-             </property>
-             <property name="rightMargin">
-              <number>0</number>
-             </property>
-             <property name="bottomMargin">
-              <number>0</number>
-             </property>
-             <item>
-              <widget class="QLabel" name="labelReceipt">
-               <property name="enabled">
-                <bool>true</bool>
-               </property>
-               <property name="sizePolicy">
-                <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
-                 <horstretch>0</horstretch>
-                 <verstretch>0</verstretch>
-                </sizepolicy>
-               </property>
-               <property name="minimumSize">
-                <size>
-                 <width>0</width>
-                 <height>0</height>
-                </size>
-               </property>
-               <property name="maximumSize">
-                <size>
-                 <width>16777215</width>
-                 <height>16777215</height>
-                </size>
-               </property>
-               <property name="font">
-                <font>
-                 <family>Consolas</family>
-                 <pointsize>-1</pointsize>
-                 <bold>false</bold>
-                </font>
-               </property>
-               <property name="styleSheet">
-                <string notr="true">QLabel { font-size: 20px; }</string>
-               </property>
-               <property name="frameShadow">
-                <enum>QFrame::Shadow::Plain</enum>
-               </property>
-               <property name="text">
-                <string>[ No Data ]</string>
-               </property>
-               <property name="alignment">
-                <set>Qt::AlignmentFlag::AlignCenter</set>
-               </property>
-              </widget>
-             </item>
-            </layout>
-           </widget>
-          </widget>
-         </item>
-        </layout>
-       </widget>
-      </item>
-     </layout>
-    </item>
-    <item>
-     <widget class="QGroupBox" name="groupBoxLog">
-      <property name="minimumSize">
-       <size>
-        <width>500</width>
-        <height>0</height>
-       </size>
-      </property>
-      <property name="maximumSize">
-       <size>
-        <width>16777215</width>
-        <height>16777215</height>
-       </size>
-      </property>
-      <property name="styleSheet">
-       <string notr="true">QGroupBox { border: 1px solid #546e7a; border-radius: 4px; margin-top: 8px; } QGroupBox::title { subcontrol-origin: margin; left: 10px; padding: 0 4px; }</string>
-      </property>
-      <property name="title">
-       <string>日志</string>
-      </property>
-      <layout class="QVBoxLayout" name="verticalLayout_log">
-       <property name="leftMargin">
-        <number>6</number>
-       </property>
-       <property name="topMargin">
-        <number>6</number>
-       </property>
-       <property name="rightMargin">
-        <number>6</number>
-       </property>
-       <property name="bottomMargin">
-        <number>6</number>
-       </property>
-       <item>
-        <layout class="QHBoxLayout" name="horizontalLayout_logTools">
-         <property name="spacing">
-          <number>8</number>
-         </property>
-         <property name="topMargin">
-          <number>0</number>
-         </property>
-         <item>
-          <widget class="QLabel" name="labelLogLevel">
-           <property name="text">
-            <string>级别:</string>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <widget class="QComboBox" name="comboBoxLogLevel">
-           <item>
-            <property name="text">
-             <string>ALL</string>
-            </property>
-           </item>
-           <item>
-            <property name="text">
-             <string>DEBUG</string>
-            </property>
-           </item>
-           <item>
-            <property name="text">
-             <string>INFO</string>
-            </property>
-           </item>
-           <item>
-            <property name="text">
-             <string>WARN</string>
-            </property>
-           </item>
-           <item>
-            <property name="text">
-             <string>ERROR</string>
-            </property>
-           </item>
-          </widget>
-         </item>
-         <item>
-          <widget class="QLineEdit" name="lineEditLogFilter">
-           <property name="placeholderText">
-            <string>输入内容自动过滤日志</string>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <spacer>
-           <property name="orientation">
-            <enum>Qt::Orientation::Horizontal</enum>
-           </property>
-           <property name="sizeHint" stdset="0">
-            <size>
-             <width>0</width>
-             <height>0</height>
-            </size>
-           </property>
-          </spacer>
-         </item>
-         <item>
-          <widget class="QPushButton" name="btnSaveLog">
-           <property name="text">
-            <string>💾 保存日志</string>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <widget class="QPushButton" name="btnClearLog">
-           <property name="text">
-            <string>🗑 清除屏幕</string>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <widget class="QCheckBox" name="checkBoxAutoScroll">
-           <property name="text">
-            <string>自动滚动</string>
-           </property>
-           <property name="checked">
-            <bool>true</bool>
-           </property>
-          </widget>
-         </item>
-        </layout>
-       </item>
-       <item>
-        <widget class="QWidget" name="logContainer" native="true">
-         <layout class="QHBoxLayout" name="horizontalLayout_logArea">
+        <item>
+         <layout class="QVBoxLayout" name="verticalLayout_screenHost">
           <property name="spacing">
            <number>0</number>
           </property>
@@ -1072,33 +69,78 @@ QScrollBar:vertical { background: #f0f0f0; width: 10px; border-radius: 5px; } QS
           <property name="bottomMargin">
            <number>0</number>
           </property>
-          <item>
-           <widget class="QTextEdit" name="plainTextEditLog">
-            <property name="minimumSize">
-             <size>
-              <width>0</width>
-              <height>0</height>
-             </size>
-            </property>
-            <property name="maximumSize">
-             <size>
-              <width>16777215</width>
-              <height>16777215</height>
-             </size>
-            </property>
-            <property name="styleSheet">
-             <string>QTextEdit { background-color: #0d1117; color: #c9d1d9; font-family: &quot;Consolas&quot;, &quot;Courier New&quot;, monospace; font-size: 12px; border: 1px solid #30363d; }</string>
-            </property>
-            <property name="readOnly">
-             <bool>true</bool>
-            </property>
-           </widget>
-          </item>
          </layout>
-        </widget>
-       </item>
-      </layout>
-     </widget>
+        </item>
+        <item>
+         <layout class="QVBoxLayout" name="verticalLayout_deviceButtonsHost">
+          <property name="spacing">
+           <number>0</number>
+          </property>
+          <property name="leftMargin">
+           <number>0</number>
+          </property>
+          <property name="topMargin">
+           <number>0</number>
+          </property>
+          <property name="rightMargin">
+           <number>0</number>
+          </property>
+          <property name="bottomMargin">
+           <number>0</number>
+          </property>
+         </layout>
+        </item>
+       </layout>
+      </item>
+      <item>
+       <layout class="QVBoxLayout" name="verticalLayout_statusHost">
+        <property name="spacing">
+         <number>6</number>
+        </property>
+       </layout>
+      </item>
+      <item>
+       <layout class="QVBoxLayout" name="verticalLayout_receipt"/>
+      </item>
+      <item>
+       <layout class="QVBoxLayout" name="verticalLayout_testCasesHost">
+        <property name="spacing">
+         <number>0</number>
+        </property>
+        <property name="leftMargin">
+         <number>0</number>
+        </property>
+        <property name="topMargin">
+         <number>0</number>
+        </property>
+        <property name="rightMargin">
+         <number>0</number>
+        </property>
+        <property name="bottomMargin">
+         <number>0</number>
+        </property>
+       </layout>
+      </item>
+     </layout>
+    </item>
+    <item>
+     <layout class="QVBoxLayout" name="verticalLayout_logHost">
+      <property name="spacing">
+       <number>0</number>
+      </property>
+      <property name="leftMargin">
+       <number>0</number>
+      </property>
+      <property name="topMargin">
+       <number>0</number>
+      </property>
+      <property name="rightMargin">
+       <number>0</number>
+      </property>
+      <property name="bottomMargin">
+       <number>0</number>
+      </property>
+     </layout>
     </item>
    </layout>
   </widget>

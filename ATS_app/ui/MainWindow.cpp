@@ -20,10 +20,16 @@
 #include <QDir>
 #include <QCoreApplication>
 #include <QFileInfo>
+#include <QtGlobal>
 
 #include <QVBoxLayout>
 #include <QHBoxLayout>
+#include <QAction>
 #include <QPushButton>
+#include <QMenu>
+#include <QMenuBar>
+#include <QTextDocument>
+#include <QSignalBlocker>
 
 static MainWindow *s_mainWindow = nullptr;
 
@@ -35,12 +41,6 @@ MainWindow::MainWindow(QWidget *parent)
     , m_appThread(new AppThread(this))
 {
     ui->setupUi(this);
-
-    // 设置主水平布局 stretch：左列(屏幕/按键/用例)=0，中列(状态/小票)=0，日志列=1
-    // 拖拽窗口变宽时，多余空间全部分配给日志区
-    ui->horizontalLayout_main->setStretchFactor(ui->verticalLayout_left, 0);
-    ui->horizontalLayout_main->setStretchFactor(ui->verticalLayout_middleRight, 0);
-    ui->horizontalLayout_main->setStretchFactor(ui->groupBoxLog, 1);
 
     setupUi();
 
@@ -63,12 +63,6 @@ MainWindow::MainWindow(QWidget *parent)
         }
     });
 
-    // 禁用最大化按钮，仅允许水平方向调整窗口宽度，高度保持固定
-    setWindowFlags(windowFlags() & ~Qt::WindowMaximizeButtonHint);
-    int fixedH = size().height();
-    setMinimumHeight(fixedH);
-    setMaximumHeight(fixedH);
-    setMinimumWidth(size().width());
     connectSignals();
 
     appendLog("=== ATS系统已启动 ===", "SYS");
@@ -114,41 +108,55 @@ MainWindow::~MainWindow()
 
 void MainWindow::setupUi()
 {
-    /* 小票区域控件已在 MainWindow.ui 中静态定义，此处无需额外初始化 */
+    m_screenPanel = new ScreenPanel(this);
+    m_buttonsPanel = new ButtonsPanel(this);
+    m_testCasesPanel = new TestCasesPanel(this);
+    m_statusPanel = new StatusPanel(this);
+    m_logPanel = new LogPanel(this);
+    m_receiptPanel = new ReceiptPanel(this);
+
+    ui->verticalLayout_screenHost->addWidget(m_screenPanel);
+    ui->verticalLayout_deviceButtonsHost->addWidget(m_buttonsPanel);
+    ui->verticalLayout_testCasesHost->addWidget(m_testCasesPanel);
+    ui->verticalLayout_statusHost->addWidget(m_statusPanel);
+    ui->verticalLayout_receipt->addWidget(m_receiptPanel);
+    ui->verticalLayout_logHost->addWidget(m_logPanel);
+    m_receiptPanel->ui()->groupBoxReceipt->setMinimumWidth(300);
+    m_receiptPanel->ui()->groupBoxReceipt->setMaximumWidth(QWIDGETSIZE_MAX);
 }
 
 void MainWindow::connectSignals()
 {
     // 按钮
-    connect(ui->btnRunSelected, &QPushButton::clicked, this, &MainWindow::onRunSelected);
-    connect(ui->btnRunAll,      &QPushButton::clicked, this, &MainWindow::onRunAll);
-    connect(ui->btnStop,        &QPushButton::clicked, this, &MainWindow::onStop);
-    connect(ui->btnSaveLog,     &QPushButton::clicked, this, &MainWindow::onSaveLog);
-    connect(ui->btnClearLog,    &QPushButton::clicked, this, &MainWindow::onClearLog);
-    connect(ui->btnImportConfig, &QPushButton::clicked, this, &MainWindow::onImportConfig);
+    connect(m_testCasesPanel->ui()->btnImportConfig, &QPushButton::clicked, this, &MainWindow::onImportConfig);
+    connect(m_testCasesPanel->ui()->btnRunSelected, &QPushButton::clicked, this, &MainWindow::onRunSelected);
+    connect(m_testCasesPanel->ui()->btnRunAll,      &QPushButton::clicked, this, &MainWindow::onRunAll);
+    connect(m_testCasesPanel->ui()->btnStop,        &QPushButton::clicked, this, &MainWindow::onStop);
+    connect(m_logPanel->ui()->btnSaveLog,     &QPushButton::clicked, this, &MainWindow::onSaveLog);
+    connect(m_logPanel->ui()->btnClearLog,    &QPushButton::clicked, this, &MainWindow::onClearLog);
 
     // 日志过滤
-    connect(ui->comboBoxLogLevel, &QComboBox::currentTextChanged,
+    connect(m_logPanel->ui()->comboBoxLogLevel, &QComboBox::currentTextChanged,
             this, &MainWindow::onLogLevelChanged);
-    connect(ui->lineEditLogFilter, &QLineEdit::textChanged,
+    connect(m_logPanel->ui()->lineEditLogFilter, &QLineEdit::textChanged,
             this, &MainWindow::onLogFilterChanged);
 
     // 搜索测试用例
-    connect(ui->lineEditSearch, &QLineEdit::textChanged,
+    connect(m_testCasesPanel->ui()->lineEditSearch, &QLineEdit::textChanged,
             this, &MainWindow::onSearchCases);
 
     // 点击测试用例列表项切换checkbox状态
-    connect(ui->listWidgetCases, &QListWidget::itemClicked,
+    connect(m_testCasesPanel->ui()->listWidgetCases, &QListWidget::itemClicked,
             this, &MainWindow::onCaseItemClicked);
 
-    connect(ui->btnDevicePower, &QPushButton::pressed, this, [this]() {
+    connect(m_buttonsPanel->ui()->btnDevicePower, &QPushButton::pressed, this, [this]() {
         if (m_appStarted) {
             // app 已启动：电源键按下正常发送按键事件
             onDeviceButtonPressed(ATS_KEY_CODE_POWER);
         }
         // app 未启动：按下时不发送任何事件，等待抬起触发启动
     });
-    connect(ui->btnDevicePower, &QPushButton::released, this, [this]() {
+    connect(m_buttonsPanel->ui()->btnDevicePower, &QPushButton::released, this, [this]() {
         if (!m_appStarted) {
             // 首次按下并抬起电源键：启动 ats_main
             m_appStarted = true;
@@ -159,31 +167,31 @@ void MainWindow::connectSignals()
         }
     });
 
-    connect(ui->btnDeviceVolUp, &QPushButton::pressed, this, [this]() {
+    connect(m_buttonsPanel->ui()->btnDeviceVolUp, &QPushButton::pressed, this, [this]() {
         onDeviceButtonPressed(ATS_KEY_CODE_VOLUME_INC);
     });
-    connect(ui->btnDeviceVolUp, &QPushButton::released, this, [this]() {
+    connect(m_buttonsPanel->ui()->btnDeviceVolUp, &QPushButton::released, this, [this]() {
         onDeviceButtonReleased(ATS_KEY_CODE_NONE);
     });
 
-    connect(ui->btnDeviceMenu, &QPushButton::pressed, this, [this]() {
+    connect(m_buttonsPanel->ui()->btnDeviceMenu, &QPushButton::pressed, this, [this]() {
         onDeviceButtonPressed(ATS_KEY_CODE_MENU);
     });
-    connect(ui->btnDeviceMenu, &QPushButton::released, this, [this]() {
+    connect(m_buttonsPanel->ui()->btnDeviceMenu, &QPushButton::released, this, [this]() {
         onDeviceButtonReleased(ATS_KEY_CODE_NONE);
     });
 
-    connect(ui->btnDeviceVolDown, &QPushButton::pressed, this, [this]() {
+    connect(m_buttonsPanel->ui()->btnDeviceVolDown, &QPushButton::pressed, this, [this]() {
         onDeviceButtonPressed(ATS_KEY_CODE_VOLUME_DEC);
     });
-    connect(ui->btnDeviceVolDown, &QPushButton::released, this, [this]() {
+    connect(m_buttonsPanel->ui()->btnDeviceVolDown, &QPushButton::released, this, [this]() {
         onDeviceButtonReleased(ATS_KEY_CODE_NONE);
     });
 
-    connect(ui->btnDeviceReplay, &QPushButton::pressed, this, [this]() {
+    connect(m_buttonsPanel->ui()->btnDeviceReplay, &QPushButton::pressed, this, [this]() {
         onDeviceButtonPressed(ATS_KEY_CODE_REPLAY);
     });
-    connect(ui->btnDeviceReplay, &QPushButton::released, this, [this]() {
+    connect(m_buttonsPanel->ui()->btnDeviceReplay, &QPushButton::released, this, [this]() {
         onDeviceButtonReleased(ATS_KEY_CODE_NONE);
     });
 
@@ -221,11 +229,11 @@ void MainWindow::appendLog(const QString &text, const QString &level)
     m_logEntries.append({coloredText, level.toUpper(), text});
 
     // 仅当匹配当前过滤条件时才加入待刷新队列
-    QString filterText = ui->lineEditLogFilter->text();
+    QString filterText = m_logPanel->ui()->lineEditLogFilter->text();
     if (!filterText.isEmpty() && !text.contains(filterText, Qt::CaseInsensitive))
         return;
 
-    QString levelFilter = ui->comboBoxLogLevel->currentText();
+    QString levelFilter = m_logPanel->ui()->comboBoxLogLevel->currentText();
     if (levelFilter != "ALL" && level.toUpper() != levelFilter)
         return;
 
@@ -248,10 +256,10 @@ void MainWindow::flushPendingLogs()
     QString htmlBlock = m_pendingLogHtml.join("<br>");
     m_pendingLogHtml.clear();
 
-    ui->plainTextEditLog->append(htmlBlock);
+    m_logPanel->ui()->plainTextEditLog->append(htmlBlock);
 
-    if (ui->checkBoxAutoScroll->isChecked()) {
-        auto *scrollbar = ui->plainTextEditLog->verticalScrollBar();
+    if (m_logPanel->ui()->checkBoxAutoScroll->isChecked()) {
+        auto *scrollbar = m_logPanel->ui()->plainTextEditLog->verticalScrollBar();
         if (scrollbar != nullptr)
             scrollbar->setValue(scrollbar->maximum());
     }
@@ -259,10 +267,10 @@ void MainWindow::flushPendingLogs()
 
 void MainWindow::rebuildLogView()
 {
-    ui->plainTextEditLog->clear();
+    m_logPanel->ui()->plainTextEditLog->clear();
 
-    QString levelFilter = ui->comboBoxLogLevel->currentText();
-    QString filterText  = ui->lineEditLogFilter->text();
+    QString levelFilter = m_logPanel->ui()->comboBoxLogLevel->currentText();
+    QString filterText  = m_logPanel->ui()->lineEditLogFilter->text();
 
     QStringList visibleEntries;
     for (const auto &entry : m_logEntries) {
@@ -276,11 +284,11 @@ void MainWindow::rebuildLogView()
 
     if (!visibleEntries.isEmpty()) {
         // 一次性追加所有可见日志，避免多次重绘
-        ui->plainTextEditLog->append(visibleEntries.join("<br>"));
+        m_logPanel->ui()->plainTextEditLog->append(visibleEntries.join("<br>"));
     }
 
-    if (ui->checkBoxAutoScroll->isChecked()) {
-        auto *scrollbar = ui->plainTextEditLog->verticalScrollBar();
+    if (m_logPanel->ui()->checkBoxAutoScroll->isChecked()) {
+        auto *scrollbar = m_logPanel->ui()->plainTextEditLog->verticalScrollBar();
         if (scrollbar != nullptr)
             scrollbar->setValue(scrollbar->maximum());
     }
@@ -288,13 +296,12 @@ void MainWindow::rebuildLogView()
 
 void MainWindow::updateTestCaseStatus(const QString &caseName, const QString &status)
 {
-    for (int i = 0; i < ui->listWidgetCases->count(); ++i) {
-        auto *item = ui->listWidgetCases->item(i);
+    for (int i = 0; i < m_testCasesPanel->ui()->listWidgetCases->count(); ++i) {
+        auto *item = m_testCasesPanel->ui()->listWidgetCases->item(i);
         // 使用 name 匹配（UserRole 存储的是 name）
         if (item->data(Qt::UserRole).toString() == caseName) {
             QString showName = item->data(Qt::UserRole).toString();
-            int idx = item->data(Qt::UserRole + 2).toInt();
-            QString displayText = QString("%1.[%2]%3").arg(idx).arg(status).arg(showName);
+            QString displayText = QString("[%1]%2").arg(status).arg(showName);
             item->setText(displayText);
             QFont itemFont("Consolas", 10, QFont::DemiBold);
             item->setFont(itemFont);
@@ -312,10 +319,11 @@ void MainWindow::updateTestCaseStatus(const QString &caseName, const QString &st
 
 void MainWindow::setRunning(bool running)
 {
-    ui->btnRunSelected->setEnabled(!running);
-    ui->btnRunAll->setEnabled(!running);
-    ui->btnStop->setEnabled(running);
-    ui->listWidgetCases->setEnabled(!running);
+    m_testCasesPanel->ui()->btnRunSelected->setEnabled(!running);
+    m_testCasesPanel->ui()->btnRunAll->setEnabled(!running);
+    m_testCasesPanel->ui()->btnStop->setEnabled(running);
+    m_testCasesPanel->ui()->listWidgetCases->setEnabled(!running);
+    m_testCasesPanel->ui()->btnImportConfig->setEnabled(!running);
 }
 
 // ─── Slots ────────────────────────────────────────────────────────────────────
@@ -324,8 +332,8 @@ void MainWindow::onRunSelected()
 {
     // 收集选中的用例名称和对应的脚本路径（仅根据 checkbox 勾选状态判断）
     QMap<QString, QString> selectedMap;
-    for (int i = 0; i < ui->listWidgetCases->count(); ++i) {
-        auto *item = ui->listWidgetCases->item(i);
+    for (int i = 0; i < m_testCasesPanel->ui()->listWidgetCases->count(); ++i) {
+        auto *item = m_testCasesPanel->ui()->listWidgetCases->item(i);
         if (item->checkState() == Qt::Checked) {
             QString name = item->data(Qt::UserRole).toString();
             QString script = item->data(Qt::UserRole + 1).toString();
@@ -347,8 +355,8 @@ void MainWindow::onRunAll()
 {
     // 收集所有用例的名称和脚本路径
     QMap<QString, QString> allMap;
-    for (int i = 0; i < ui->listWidgetCases->count(); ++i) {
-        auto *item = ui->listWidgetCases->item(i);
+    for (int i = 0; i < m_testCasesPanel->ui()->listWidgetCases->count(); ++i) {
+        auto *item = m_testCasesPanel->ui()->listWidgetCases->item(i);
         QString name = item->data(Qt::UserRole).toString();
         QString script = item->data(Qt::UserRole + 1).toString();
         if (!script.isEmpty()) {
@@ -370,7 +378,7 @@ void MainWindow::onStop()
     appendLog("停止用例测试", "WARN");
     // 不立即调用 setRunning(false)，等待 allDone 信号由 onAllTestsFinished 处理
     // 只禁用 Stop 按钮，防止重复点击；Run/RunAll 保持禁用直到真正停止
-    ui->btnStop->setEnabled(false);
+    m_testCasesPanel->ui()->btnStop->setEnabled(false);
 }
 
 void MainWindow::onTestStarted(const QString &caseName)
@@ -410,7 +418,7 @@ void MainWindow::onSaveLog()
     QFile file(path);
     if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
         QTextStream ts(&file);
-        ts << ui->plainTextEditLog->toPlainText();
+        ts << m_logPanel->ui()->plainTextEditLog->toPlainText();
         appendLog(QString("Log saved to: %1").arg(path), "INFO");
     } else {
         appendLog(QString("Failed to save log: %1").arg(path), "ERROR");
@@ -419,7 +427,7 @@ void MainWindow::onSaveLog()
 
 void MainWindow::onClearLog()
 {
-    ui->plainTextEditLog->clear();
+    m_logPanel->ui()->plainTextEditLog->clear();
     m_logEntries.clear();
 }
 
@@ -435,8 +443,8 @@ void MainWindow::onLogFilterChanged(const QString &/*filter*/)
 
 void MainWindow::onSearchCases(const QString &text)
 {
-    for (int i = 0; i < ui->listWidgetCases->count(); ++i) {
-        auto *item = ui->listWidgetCases->item(i);
+    for (int i = 0; i < m_testCasesPanel->ui()->listWidgetCases->count(); ++i) {
+        auto *item = m_testCasesPanel->ui()->listWidgetCases->item(i);
         bool match = text.isEmpty() ||
                      item->data(Qt::UserRole).toString().contains(text, Qt::CaseInsensitive);
         item->setHidden(!match);
@@ -446,11 +454,11 @@ void MainWindow::onSearchCases(const QString &text)
 void MainWindow::onCaseItemClicked(QListWidgetItem *item)
 {
     if (!item) return;
-    
+
     // 切换checkbox状态
     Qt::CheckState newState = (item->checkState() == Qt::Checked) ? Qt::Unchecked : Qt::Checked;
     item->setCheckState(newState);
-    
+
     // 同步更新配置中的 chosen 状态（用 script 文件名匹配）
     QString scriptBaseName = item->data(Qt::UserRole).toString();
     for (auto &config : m_testCaseConfigs) {
@@ -675,7 +683,7 @@ void MainWindow::applyTestCaseConfig(const QVector<TestCaseConfig> &configs, con
     appendLog(QString("发现 %1 个测试用例配置，正在导入中...").arg(configs.size()), "SYS");
     
     // 清空现有列表和配置
-    ui->listWidgetCases->clear();
+    m_testCasesPanel->ui()->listWidgetCases->clear();
     m_testCaseConfigs.clear();
     
     QFont itemFont("Consolas", 10);
@@ -704,12 +712,11 @@ void MainWindow::applyTestCaseConfig(const QVector<TestCaseConfig> &configs, con
         
         // 创建列表项
         auto *item = new QListWidgetItem(
-            QString("%1.%2").arg(caseIndex).arg(config.name), ui->listWidgetCases);
+            QString("%1").arg(config.name), m_testCasesPanel->ui()->listWidgetCases);
         item->setFlags(item->flags() | Qt::ItemIsUserCheckable | Qt::ItemIsSelectable);
         item->setCheckState(config.chosen ? Qt::Checked : Qt::Unchecked);
         item->setData(Qt::UserRole, config.name);           // name 作为唯一标识
         item->setData(Qt::UserRole + 1, scriptFullPath);    // 脚本完整路径
-        item->setData(Qt::UserRole + 2, caseIndex);         // 序号
         item->setFont(itemFont);
         item->setForeground(itemForeground);
         
@@ -724,13 +731,13 @@ void MainWindow::applyTestCaseConfig(const QVector<TestCaseConfig> &configs, con
         caseIndex++;
     }
 
-    appendLog(QString("已成功导入 %1 个测试用例配置").arg(ui->listWidgetCases->count()), "SYS");
+    appendLog(QString("已成功导入 %1 个测试用例配置").arg(m_testCasesPanel->ui()->listWidgetCases->count()), "SYS");
 }
 
 void MainWindow::loadDefaultConfig()
 {
     // 清除保存的测试用例
-    ui->listWidgetCases->clear();
+    m_testCasesPanel->ui()->listWidgetCases->clear();
     m_testCaseConfigs.clear();
     
     // 默认配置文件路径: 运行exe程序的根目录/scripts/config.xml
@@ -872,6 +879,8 @@ void MainWindow::onShowReceipt()
         return;
     }
 
+    showReceiptPanel();
+
     /* 添加白边距，模拟小票纸张效果 */
     int margin = 16;
     int totalW = m_receiptImage.width() + margin * 2;
@@ -888,27 +897,13 @@ void MainWindow::onShowReceipt()
     m_receiptPixmap = pixmap;
 
     /* 设置初始样式 */
-    ui->labelReceipt->setStyleSheet("");
-    ui->labelReceipt->setAlignment(Qt::AlignHCenter | Qt::AlignTop);
-    ui->labelReceipt->setContentsMargins(0, 0, 0, 0);
-
-    /* 启用滚动 */
-    ui->scrollAreaReceipt->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    m_receiptPanel->ui()->labelReceipt->setStyleSheet("");
+    m_receiptPanel->ui()->labelReceipt->setAlignment(Qt::AlignHCenter | Qt::AlignTop);
+    m_receiptPanel->ui()->labelReceipt->setContentsMargins(0, 0, 0, 0);
+    m_receiptPanel->ui()->scrollAreaReceipt->verticalScrollBar()->setValue(0);
 
     /* 应用缩放 */
     scaleReceiptImage();
-
-    /* 调整内容区域大小以容纳小票（高度取小票高度或可视高度中的较大值） */
-    if (!m_receiptPixmap.isNull()) {
-        int contentWidth = ui->scrollAreaReceipt->viewport()->width();
-        int labelHeight = ui->labelReceipt->height();
-        int contentHeight = qMax(labelHeight, ui->scrollAreaReceipt->viewport()->height());
-        ui->scrollAreaReceiptContents->setFixedSize(contentWidth, contentHeight);
-    }
-
-    /* 自动滚到顶部 */
-    if (ui->scrollAreaReceipt)
-        ui->scrollAreaReceipt->verticalScrollBar()->setValue(0);
 }
 
 void MainWindow::scaleReceiptImage()
@@ -916,28 +911,35 @@ void MainWindow::scaleReceiptImage()
     if (m_receiptPixmap.isNull())
         return;
 
-    if (ui->scrollAreaReceipt == nullptr)
+    if (m_receiptPanel == nullptr)
         return;
 
-    /* 获取滚动区域可视宽度 */
-    int availableWidth = ui->scrollAreaReceipt->viewport()->width() - ui->scrollAreaReceipt->verticalScrollBar()->sizeHint().width();
+    if (m_receiptPanel->ui()->scrollAreaReceipt == nullptr)
+        return;
+
+    int availableWidth = m_receiptPanel->ui()->scrollAreaReceipt->viewport()->width();
     if (availableWidth <= 0)
         return;
 
-    int originalWidth = m_receiptPixmap.width();
-    if (originalWidth <= 0)
+    QPixmap scaledPixmap = m_receiptPixmap.scaled(
+        availableWidth,
+        16777215,
+        Qt::KeepAspectRatio,
+        Qt::SmoothTransformation);
+    if (scaledPixmap.isNull())
         return;
 
-    /* 缩放到可用宽度，保持宽高比 */
-    double scale = static_cast<double>(availableWidth) / originalWidth;
-    int scaledHeight = static_cast<int>(m_receiptPixmap.height() * scale);
+    m_receiptPanel->ui()->labelReceipt->setFixedSize(scaledPixmap.size());
+    m_receiptPanel->ui()->labelReceipt->setPixmap(scaledPixmap);
+}
 
-    /* 设置固定高度并缩放图片 */
-    ui->labelReceipt->setFixedHeight(scaledHeight);
-    ui->labelReceipt->setPixmap(m_receiptPixmap.scaled(
-        availableWidth, scaledHeight,
-        Qt::KeepAspectRatio,
-        Qt::SmoothTransformation));
+void MainWindow::showReceiptPanel()
+{
+    if (m_receiptPanel == nullptr)
+        return;
+
+    m_receiptPanel->show();
+    m_receiptPanel->raise();
 }
 
 QImage MainWindow::grayToQImage(const unsigned char *data, int width, int height)
@@ -964,128 +966,57 @@ QImage MainWindow::grayToQImage(const unsigned char *data, int width, int height
  */
 void MainWindow::updateStatusPanel()
 {
+    QString labelContent;
+
     // 防御性检查：确保 UI 完全就绪
-    if (!ui || !ui->label_app_status)
+    if (!ui || m_statusPanel == nullptr)
         return;
 
     // 辅助：设置标签值，格式 <span style='color:#555555;'>名称：</span><span style='color:#色值;'>值</span>
-    auto setKeyValRaw = [](QLabel *label, const QString &key, const QString &valColor, const QString &valText) {
-        if (!label) return;
-        label->setText(
-            QString("<span style='color:#555555;'>%1</span>"
-                    "<span style='color:%2;'>%3</span>")
-                .arg(key).arg(valColor).arg(valText));
-        label->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+    auto setKeyValRaw = [](QString &content, const QString &key, const QString &valColor, const QString &valText) {
+        content.append(QString("<span style='color:#555555;'>%1</span>"
+                    "<span style='color:%2;'>%3</span><br>")
+                    .arg(key).arg(valColor).arg(valText));
     };
 
-    // ── 0: 程序状态 ──────────────────────────────────────────────────────────
-    setKeyValRaw(ui->label_app_status, "程序状态：", m_appStarted ? "#4caf50" : "#ff9800",
-        m_appStarted ? "运行中" : "等待启动");
+    // ── 1: 程序状态 ──────────────────────────────────────────────────────────
+    bool appRunning = m_appThread->isAppRunning();
+    QString appStatusText = appRunning ? "运行中" : (m_appStarted ? "已停止" : "等待启动");
+    QString appStatusColor = appRunning ? "#4caf50" : (m_appStarted ? "#f44336" : "#ff9800");
+    setKeyValRaw(labelContent, "程序状态：", appStatusColor, appStatusText);
 
-    // ── 1: 网络状态 ──────────────────────────────────────────────────────────
-    setKeyValRaw(ui->label_net_status, "网络状态：", ats_net_get_status() ? "#4caf50" : "#f44336",
-        ats_net_get_status() ? "✓" : "✕");
-
-    // ── 2: 网络类型 ──────────────────────────────────────────────────────────
-    {
-        QString modeText;
-        switch (ats_net_get_mode()) {
-            case ATS_NET_MODE_CELLUALR: modeText = "蜂窝"; break;
-            case ATS_NET_MODE_WIFI:      modeText = "WiFi"; break;
-            case ATS_NET_MODE_ETHERNET:  modeText = "以太网"; break;
-            default:                      modeText = "未知"; break;
-        }
-        setKeyValRaw(ui->label_net_type, "网络类型：", "#555555", modeText);
-    }
-
-    // ── 3: WiFi模块状态 ──────────────────────────────────────────────────────
-    setKeyValRaw(ui->label_wifi_module_status, "WiFi模块状态：", ats_net_wifi_get_module_status() ? "#4caf50" : "#f44336",
-        ats_net_wifi_get_module_status() ? "✓" : "✕");
-
-    // ── 4: WiFi热点名称 ──────────────────────────────────────────────────────
-    {
-        char *ssid = ats_net_wifi_get_ssid();
-        QString ssidStr = (ssid && ssid[0] != '\0') ? QString::fromLatin1(ssid) : "(None)";
-        setKeyValRaw(ui->label_wifi_ssid, "WiFi热点名称：", "#555555", ssidStr);
-    }
-
-    // ── 5: WiFi信号强度 ─────────────────────────────────────────────────────
-    {
-        int sig = ats_net_wifi_get_signal();
-        setKeyValRaw(ui->label_wifi_signal, "WiFi信号强度：", "#555555", QString::number(sig));
-    }
-
-    // ── 6: 蜂窝MCC ──────────────────────────────────────────────────────────
-    {
-        int mcc = ats_net_cellular_get_mcc();
-        setKeyValRaw(ui->label_cellular_mcc, "蜂窝MCC：", "#555555", QString::number(mcc));
-    }
-
-    // ── 7: 蜂窝MNC ──────────────────────────────────────────────────────────
-    {
-        int mnc = ats_net_cellular_get_mnc();
-        setKeyValRaw(ui->label_cellular_mnc, "蜂窝MNC：", "#555555", QString::number(mnc));
-    }
-
-    // ── 8: 蜂窝LAC ──────────────────────────────────────────────────────────
-    {
-        int lac = ats_net_cellular_get_lac();
-        setKeyValRaw(ui->label_cellular_lac, "蜂窝LAC：", "#555555", QString::number(lac));
-    }
-
-    // ── 9: 蜂窝CID ───────────────────────────────────────────────────────────
-    {
-        int cid = ats_net_cellular_get_cell_id();
-        setKeyValRaw(ui->label_cellular_cid, "蜂窝CID：", "#555555", QString::number(cid));
-    }
-
-    // ── 10: 蜂窝信号强度 ─────────────────────────────────────────────────────
-    {
-        int sig = ats_net_cellular_get_signal();
-        setKeyValRaw(ui->label_cellular_signal, "蜂窝信号强度：", "#555555", QString::number(sig));
-    }
-
-    // ── 11: 蜂窝IMSI ────────────────────────────────────────────────────────
-    {
-        char *imsi = ats_net_cellular_get_imsi();
-        QString imsiStr = (imsi && imsi[0] != '\0') ? QString::fromLatin1(imsi) : "(None)";
-        setKeyValRaw(ui->label_cellular_imsi, "蜂窝IMSI：", "#555555", imsiStr);
-    }
-
-    // ── 12: 蜂窝IMEI ─────────────────────────────────────────────────────────
-    {
-        char *imei = ats_net_cellular_get_imei();
-        QString imeiStr = (imei && imei[0] != '\0') ? QString::fromLatin1(imei) : "(None)";
-        setKeyValRaw(ui->label_cellular_imei, "蜂窝IMEI：", "#555555", imeiStr);
-    }
-
-    // ── 14: 序列号 ───────────────────────────────────────────────────────────
+    // ── 2: 序列号 ───────────────────────────────────────────────────────────
     {
         char *sn = ats_serial_number_get();
         QString snStr = (sn && sn[0] != '\0') ? QString::fromLatin1(sn) : "(None)";
-        setKeyValRaw(ui->label_serial_number, "序列号：", "#555555", snStr);
+        setKeyValRaw(labelContent, "序列号：", "#555555", snStr);
     }
 
-    // ── 15: 音频音量 ─────────────────────────────────────────────────────────────
+    // ── 3: 网络状态 ──────────────────────────────────────────────────────────
+    setKeyValRaw(labelContent, "网络状态：", ats_net_get_status() ? "#4caf50" : "#f44336", ats_net_get_status() ? "✓" : "✕");
+
+    // ── 4: 音频音量 ─────────────────────────────────────────────────────────────
     {
         size_t vol = 0;
         ats_audio_get_volume(&vol);
-        setKeyValRaw(ui->label_volume, "音频音量：", "#555555", QString::number(vol));
+        setKeyValRaw(labelContent, "音频音量：", "#555555", QString::number(vol));
     }
 
-    // ── 16: 音频播放状态 ─────────────────────────────────────────────────────────
-    setKeyValRaw(ui->label_audio_status, "音频播放状态：", ats_audio_is_playing() ? "#4caf50" : "#f44336",
-        ats_audio_is_playing() ? "✓" : "✕");
+    // ── 5: 音频播放状态 ─────────────────────────────────────────────────────────
+    setKeyValRaw(labelContent, "音频播放状态：", ats_audio_is_playing() ? "#4caf50" : "#f44336", ats_audio_is_playing() ? "✓" : "✕");
 
-    // ── 17: 音频队列数量 ──────────────────────────────────────────────────────
-    setKeyValRaw(ui->label_audio_queue_count, "音频队列数量：", "#555555", QString::number(ats_audio_get_queue_count()));
+    // ── 6: 音频队列数量 ──────────────────────────────────────────────────────
+    setKeyValRaw(labelContent, "音频队列数量：", "#555555", QString::number(ats_audio_get_queue_count()));
 
-    // ── 18: 网络链接数量 ─────────────────────────────────────────────────────────
-    setKeyValRaw(ui->label_connection_count, "网络链接数量：", "#555555", QString::number(ats_net_get_connected_count()));
+    // ── 7: 网络链接数量 ─────────────────────────────────────────────────────────
+    setKeyValRaw(labelContent, "网络链接数量：", "#555555", QString::number(ats_net_get_connected_count()));
 
-    // ── 19: 纸张状态 ─────────────────────────────────────────────────────────
-    setKeyValRaw(ui->label_printer_paper_status, "纸张状态：", ats_printer_get_paper_status() ? "#4caf50" : "#f44336",
-        ats_printer_get_paper_status() ? "✓" : "✕");
+    // ── 8: 纸张状态 ─────────────────────────────────────────────────────────
+    setKeyValRaw(labelContent, "纸张状态：", ats_printer_get_paper_status() ? "#4caf50" : "#f44336", ats_printer_get_paper_status() ? "✓" : "✕");
+
+    m_statusPanel->ui()->labelStatus->setFixedHeight(m_statusPanel->ui()->scrollAreaStatus->viewport()->height());
+    m_statusPanel->ui()->labelStatus->setText(labelContent);
+    m_statusPanel->ui()->labelStatus->setAlignment(Qt::AlignLeft | Qt::AlignTop);
 }
 
 // ─── 屏幕区域渲染 ─────────────────────────────────────────────────────────────
@@ -1101,7 +1032,7 @@ void MainWindow::updateStatusPanel()
  */
 void MainWindow::updateScreenDisplay()
 {
-    QLabel *label = ui->labelScreen;
+    QLabel *label = m_screenPanel->ui()->labelScreen;
     int areaW = label->width();
     int areaH = label->height();
     if (areaW <= 0 || areaH <= 0)
@@ -1156,5 +1087,4 @@ void MainWindow::updateScreenDisplay()
 void MainWindow::resizeEvent(QResizeEvent *event)
 {
     QMainWindow::resizeEvent(event);
-    QMetaObject::invokeMethod(this, [this]() { updateScreenDisplay(); }, Qt::QueuedConnection);
 }

@@ -36,6 +36,12 @@ INCLUDEPATH += \
 SOURCES += \
     qt_main.cpp \
     ui/MainWindow.cpp \
+    ui/ScreenPanel.cpp \
+    ui/ButtonsPanel.cpp \
+    ui/TestCasesPanel.cpp \
+    ui/StatusPanel.cpp \
+    ui/LogPanel.cpp \
+    ui/ReceiptPanel.cpp \
     core/TestCase.cpp \
     core/TestRunner.cpp \
     core/AppThread.cpp \
@@ -52,6 +58,12 @@ SOURCES += \
 
 HEADERS += \
     ui/MainWindow.h \
+    ui/ScreenPanel.h \
+    ui/ButtonsPanel.h \
+    ui/TestCasesPanel.h \
+    ui/StatusPanel.h \
+    ui/LogPanel.h \
+    ui/ReceiptPanel.h \
     core/TestCase.h \
     core/TestRunner.h \
     core/AppThread.h \
@@ -68,7 +80,13 @@ HEADERS += \
     sdk/ats_sys.h \
 
 FORMS += \
-    ui/MainWindow.ui
+    ui/MainWindow.ui \
+    ui/ScreenPanel.ui \
+    ui/ButtonsPanel.ui \
+    ui/TestCasesPanel.ui \
+    ui/StatusPanel.ui \
+    ui/LogPanel.ui \
+    ui/ReceiptPanel.ui
 
 # ─── Definitions ──────────────────────────────────────────────────────────────
 DEFINES += ATS_SIMULATOR \
