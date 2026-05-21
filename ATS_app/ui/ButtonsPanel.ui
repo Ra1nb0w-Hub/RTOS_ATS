@@ -19,7 +19,7 @@
   <property name="maximumSize">
    <size>
     <width>334</width>
-    <height>200</height>
+    <height>16777215</height>
    </size>
   </property>
   <layout class="QVBoxLayout" name="verticalLayout_root">

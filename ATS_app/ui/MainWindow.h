@@ -8,6 +8,8 @@
 #include <QPushButton>
 #include <QDomElement>
 #include <QListWidgetItem>
+class QAction;
+class QCloseEvent;
 #include "ScreenPanel.h"
 #include "ButtonsPanel.h"
 #include "TestCasesPanel.h"
@@ -18,6 +20,8 @@
 #include "core/KeySimulator.h"
 #include "core/AppThread.h"
 #include "log/LogManager.h"
+#include "qemu/QemuCortexMController.h"
+#include "core/RpcSerialServer.h"
 #include "sdk/ats_sys.h"
 #include "sdk/ats_audio.h"
 #include "sdk/ats_net.h"
@@ -112,6 +116,7 @@ private slots:
 
     // ─── 配置导入 ────────────────────────────────
     void onImportConfig();
+    void onImportElf();
 
     // ─── 搜索测试用例 ────────────────────────────
     void onSearchCases(const QString &text);
@@ -128,9 +133,11 @@ private slots:
 
 private:
     void setupUi();
+    void setupToolBar();
     void connectSignals();
     void updateTestCaseStatus(const QString &caseName, const QString &status);
     void setRunning(bool running);
+    void startQemuWithImportedElf();
     void rebuildLogView();
     void updateScreenDisplay();
     void flushPendingLogs();
@@ -147,12 +154,17 @@ private:
     QImage grayToQImage(const unsigned char *data, int width, int height);
 
 protected:
+    void closeEvent(QCloseEvent *event) override;
     void resizeEvent(QResizeEvent *event) override;
 
     Ui::MainWindow *ui;
     TestRunner     *m_runner;
     LogManager     *m_logManager;
     AppThread      *m_appThread;
+    QemuCortexMController *m_qemuController;
+    RpcSerialServer *m_logSerialServer;
+    RpcSerialServer *m_rpcSerialServer;
+    RpcSerialServer *m_lcdSerialServer;
     ScreenPanel    *m_screenPanel = nullptr;
     ButtonsPanel   *m_buttonsPanel = nullptr;
     TestCasesPanel *m_testCasesPanel = nullptr;
@@ -182,6 +194,9 @@ protected:
 
     // app 启动状态：false=等待电源键首次触发启动，true=已启动（电源键恢复正常功能）
     bool         m_appStarted = false;
+    bool         m_closePending = false;
+    QString      m_importedElfPath;
+    QAction     *m_actionImportElf = nullptr;
     
     // 当前加载的配置文件路径
     QString      m_currentConfigPath;

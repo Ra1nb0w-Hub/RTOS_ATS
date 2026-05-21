@@ -35,6 +35,7 @@ INCLUDEPATH += \
 # ─── Sources ──────────────────────────────────────────────────────────────────
 SOURCES += \
     qt_main.cpp \
+    qemu/QemuCortexMController.cpp \
     ui/MainWindow.cpp \
     ui/ScreenPanel.cpp \
     ui/ButtonsPanel.cpp \
@@ -46,8 +47,10 @@ SOURCES += \
     core/TestRunner.cpp \
     core/AppThread.cpp \
     core/KeySimulator.cpp \
-    log/LogManager.cpp \
+    core/RpcProtocol.cpp \
+    core/RpcSerialServer.cpp \
     lua/LuaEngine.cpp \
+    log/LogManager.cpp \
     sdk/ats_lcd.c \
     sdk/ats_printer.c \
     sdk/ats_net.c \
@@ -57,6 +60,7 @@ SOURCES += \
     app/main.c
 
 HEADERS += \
+    qemu/QemuCortexMController.h \
     ui/MainWindow.h \
     ui/ScreenPanel.h \
     ui/ButtonsPanel.h \
@@ -68,6 +72,8 @@ HEADERS += \
     core/TestRunner.h \
     core/AppThread.h \
     core/KeySimulator.h \
+    core/RpcProtocol.h \
+    core/RpcSerialServer.h \
     log/LogManager.h \
     lua/LuaEngine.h \
     lua/LuaTestCase.h \

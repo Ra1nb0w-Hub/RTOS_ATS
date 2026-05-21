@@ -19,7 +19,7 @@
   <property name="maximumSize">
    <size>
     <width>314</width>
-    <height>462</height>
+    <height>16777215</height>
    </size>
   </property>
   <property name="styleSheet">

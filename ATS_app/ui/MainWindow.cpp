@@ -9,6 +9,7 @@
 #include <QTextStream>
 #include <QScrollBar>
 #include <QDebug>
+#include <QCloseEvent>
 #include <QResizeEvent>
 #include <QPainter>
 #include <QTimer>
@@ -20,6 +21,8 @@
 #include <QDir>
 #include <QCoreApplication>
 #include <QFileInfo>
+#include <QProcessEnvironment>
+#include <QSettings>
 #include <QtGlobal>
 
 #include <QVBoxLayout>
@@ -28,6 +31,7 @@
 #include <QPushButton>
 #include <QMenu>
 #include <QMenuBar>
+#include <QToolBar>
 #include <QTextDocument>
 #include <QSignalBlocker>
 
@@ -39,10 +43,19 @@ MainWindow::MainWindow(QWidget *parent)
     , m_runner(new TestRunner(this))
     , m_logManager(LogManager::instance())
     , m_appThread(new AppThread(this))
+    , m_qemuController(new QemuCortexMController(this))
+    , m_logSerialServer(new RpcSerialServer(this))
+    , m_rpcSerialServer(new RpcSerialServer(this))
+    , m_lcdSerialServer(new RpcSerialServer(this))
 {
     ui->setupUi(this);
 
+    m_logSerialServer->setChannelRole(RpcSerialServer::ChannelRole::Log);
+    m_rpcSerialServer->setChannelRole(RpcSerialServer::ChannelRole::Rpc);
+    m_lcdSerialServer->setChannelRole(RpcSerialServer::ChannelRole::Lcd);
+
     setupUi();
+    setupToolBar();
 
     // 注册小票关闭回调（从 AppThread 中触发，同步拷贝 buffer 后异步显示）
     s_mainWindow = this;
@@ -76,8 +89,45 @@ MainWindow::MainWindow(QWidget *parent)
         appendLog(msg, level);
     });
 
-    /* 等待用户按下电源键启动 ats_main */
-    appendLog("点击[电源]键启动App...", "SYS");
+    connect(m_qemuController, &QemuCortexMController::logMessage, this, &MainWindow::appendLog);
+    connect(m_qemuController, &QemuCortexMController::started, this, [this]() {
+        m_appStarted = true;
+    });
+    connect(m_qemuController, &QemuCortexMController::stopped, this, [this]() {
+        m_appStarted = false;
+        if (m_closePending) {
+            appendLog("QEMU 已停止，继续关闭主窗口...", "SYS");
+            m_closePending = false;
+            QTimer::singleShot(0, this, &QWidget::close);
+        }
+    });
+
+    {
+        const QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+        auto resolvePort = [this, &env](const char *name, quint16 defaultPort) {
+            bool portOk = false;
+            quint16 port = env.value(QString::fromLatin1(name), QString::number(defaultPort)).toUShort(&portOk);
+            if (!portOk || port == 0U) {
+                appendLog(QString("%1 无效，已回退到默认端口 %2").arg(QString::fromLatin1(name)).arg(defaultPort), "WARN");
+                return defaultPort;
+            }
+
+            return port;
+        };
+        const quint16 logPort = resolvePort("ATS_LOG_PORT", 34567U);
+        const quint16 rpcPort = resolvePort("ATS_RPC_PORT", 34568U);
+        const quint16 lcdPort = resolvePort("ATS_LCD_PORT", 34569U);
+
+        if (!m_logSerialServer->start(logPort)) {
+            appendLog(QString("LOG服务启动失败, 端口: %1").arg(logPort), "ERROR");
+        }
+        if (!m_rpcSerialServer->start(rpcPort)) {
+            appendLog(QString("RPC服务启动失败, 端口: %1").arg(rpcPort), "ERROR");
+        }
+        if (!m_lcdSerialServer->start(lcdPort)) {
+            appendLog(QString("LCD服务启动失败, 端口: %1").arg(lcdPort), "ERROR");
+        }
+    }
 
     /* 屏幕刷新定时器（启动后立即开始，ats_main 同时在后台运行） */
     connect(&m_screenTimer, &QTimer::timeout, this, &MainWindow::updateScreenDisplay);
@@ -102,8 +152,29 @@ MainWindow::MainWindow(QWidget *parent)
 
 MainWindow::~MainWindow()
 {
+    if (m_qemuController != nullptr) {
+        m_qemuController->stop();
+    }
     m_logManager->setOutputCallback(nullptr);
     delete ui;
+}
+
+void MainWindow::closeEvent(QCloseEvent *event)
+{
+    if (m_qemuController != nullptr && m_qemuController->isRunning()) {
+        if (!m_closePending) {
+            m_closePending = true;
+            appendLog("主窗口关闭中，正在异步停止 QEMU...", "SYS");
+            setEnabled(false);
+            m_qemuController->stop();
+        }
+
+        event->ignore();
+        return;
+    }
+
+    setEnabled(true);
+    QMainWindow::closeEvent(event);
 }
 
 void MainWindow::setupUi()
@@ -125,10 +196,20 @@ void MainWindow::setupUi()
     m_receiptPanel->ui()->groupBoxReceipt->setMaximumWidth(QWIDGETSIZE_MAX);
 }
 
+void MainWindow::setupToolBar()
+{
+    QToolBar *toolBar = addToolBar(QStringLiteral("工具栏"));
+    toolBar->setObjectName(QStringLiteral("AtsToolBar"));
+    toolBar->setMovable(false);
+
+    m_actionImportElf = toolBar->addAction(QStringLiteral("导入ELF文件"));
+}
+
 void MainWindow::connectSignals()
 {
     // 按钮
     connect(m_testCasesPanel->ui()->btnImportConfig, &QPushButton::clicked, this, &MainWindow::onImportConfig);
+    connect(m_actionImportElf, &QAction::triggered, this, &MainWindow::onImportElf);
     connect(m_testCasesPanel->ui()->btnRunSelected, &QPushButton::clicked, this, &MainWindow::onRunSelected);
     connect(m_testCasesPanel->ui()->btnRunAll,      &QPushButton::clicked, this, &MainWindow::onRunAll);
     connect(m_testCasesPanel->ui()->btnStop,        &QPushButton::clicked, this, &MainWindow::onStop);
@@ -149,6 +230,7 @@ void MainWindow::connectSignals()
     connect(m_testCasesPanel->ui()->listWidgetCases, &QListWidget::itemClicked,
             this, &MainWindow::onCaseItemClicked);
 
+    // 电源键
     connect(m_buttonsPanel->ui()->btnDevicePower, &QPushButton::pressed, this, [this]() {
         if (m_appStarted) {
             // app 已启动：电源键按下正常发送按键事件
@@ -159,21 +241,22 @@ void MainWindow::connectSignals()
     connect(m_buttonsPanel->ui()->btnDevicePower, &QPushButton::released, this, [this]() {
         if (!m_appStarted) {
             // 首次按下并抬起电源键：启动 ats_main
-            m_appStarted = true;
-            m_appThread->startApp();
+            if (m_importedElfPath.isEmpty()) {
+                m_appStarted = true;
+                m_appThread->startApp();
+            }
+            else
+            {
+                startQemuWithImportedElf();
+            }
         } else {
             // app 已启动：电源键抬起正常发送释放事件
             onDeviceButtonReleased(ATS_KEY_CODE_NONE);
         }
+        
     });
 
-    connect(m_buttonsPanel->ui()->btnDeviceVolUp, &QPushButton::pressed, this, [this]() {
-        onDeviceButtonPressed(ATS_KEY_CODE_VOLUME_INC);
-    });
-    connect(m_buttonsPanel->ui()->btnDeviceVolUp, &QPushButton::released, this, [this]() {
-        onDeviceButtonReleased(ATS_KEY_CODE_NONE);
-    });
-
+    // 菜单键
     connect(m_buttonsPanel->ui()->btnDeviceMenu, &QPushButton::pressed, this, [this]() {
         onDeviceButtonPressed(ATS_KEY_CODE_MENU);
     });
@@ -181,6 +264,15 @@ void MainWindow::connectSignals()
         onDeviceButtonReleased(ATS_KEY_CODE_NONE);
     });
 
+    // 功能1键
+    connect(m_buttonsPanel->ui()->btnDeviceVolUp, &QPushButton::pressed, this, [this]() {
+        onDeviceButtonPressed(ATS_KEY_CODE_VOLUME_INC);
+    });
+    connect(m_buttonsPanel->ui()->btnDeviceVolUp, &QPushButton::released, this, [this]() {
+        onDeviceButtonReleased(ATS_KEY_CODE_NONE);
+    });
+
+    // 功能2键
     connect(m_buttonsPanel->ui()->btnDeviceVolDown, &QPushButton::pressed, this, [this]() {
         onDeviceButtonPressed(ATS_KEY_CODE_VOLUME_DEC);
     });
@@ -188,6 +280,7 @@ void MainWindow::connectSignals()
         onDeviceButtonReleased(ATS_KEY_CODE_NONE);
     });
 
+    // 功能3键
     connect(m_buttonsPanel->ui()->btnDeviceReplay, &QPushButton::pressed, this, [this]() {
         onDeviceButtonPressed(ATS_KEY_CODE_REPLAY);
     });
@@ -324,6 +417,33 @@ void MainWindow::setRunning(bool running)
     m_testCasesPanel->ui()->btnStop->setEnabled(running);
     m_testCasesPanel->ui()->listWidgetCases->setEnabled(!running);
     m_testCasesPanel->ui()->btnImportConfig->setEnabled(!running);
+}
+
+void MainWindow::startQemuWithImportedElf()
+{
+    if (m_importedElfPath.isEmpty()) {
+        appendLog("请先导入 ELF 文件。", "WARN");
+        return;
+    }
+
+    if (!m_logSerialServer->isListening() ||
+        !m_rpcSerialServer->isListening() ||
+        !m_lcdSerialServer->isListening()) {
+        appendLog("多UART服务未全部监听，无法启动应用程序。", "ERROR");
+        return;
+    }
+
+    if (m_qemuController->isRunning()) {
+        appendLog("QEMU 已在运行中。", "WARN");
+        return;
+    }
+
+    m_qemuController->setFirmwarePath(m_importedElfPath);
+    if (!m_qemuController->start(m_logSerialServer->listenPort(),
+                                 m_rpcSerialServer->listenPort(),
+                                 m_lcdSerialServer->listenPort())) {
+        appendLog("QEMU 启动失败。", "ERROR");
+    }
 }
 
 // ─── Slots ────────────────────────────────────────────────────────────────────
@@ -476,6 +596,43 @@ void MainWindow::onCaseItemClicked(QListWidgetItem *item)
 }
 
 // ─── 配置导入相关实现 ─────────────────────────────────────────────────────────
+
+void MainWindow::onImportElf()
+{
+    static const char kRecentElfDirectoryKey[] = "paths/recentElfDirectory";
+
+    if (m_appStarted || m_qemuController->isRunning()) {
+        QMessageBox::information(this, "提示", "应用程序运行中，无法重新导入 ELF 文件");
+        return;
+    }
+
+    QSettings settings;
+    QString initialDirectory = settings.value(QString::fromLatin1(kRecentElfDirectoryKey)).toString();
+    if (initialDirectory.isEmpty()) {
+        initialDirectory = m_importedElfPath.isEmpty()
+                               ? QDir::homePath()
+                               : QFileInfo(m_importedElfPath).absolutePath();
+    }
+
+    const QString filePath = QFileDialog::getOpenFileName(
+        this,
+        "导入 ELF 文件",
+        initialDirectory,
+        "ELF Files (*.elf *.axf *.out);;All Files (*)");
+
+    if (filePath.isEmpty()) {
+        return;
+    }
+
+    const QFileInfo elfInfo(filePath);
+    if (!elfInfo.exists() || !elfInfo.isFile()) {
+        QMessageBox::warning(this, "导入失败", QString("无法打开 ELF 文件: %1").arg(filePath));
+        return;
+    }
+
+    m_importedElfPath = elfInfo.absoluteFilePath();
+    settings.setValue(QString::fromLatin1(kRecentElfDirectoryKey), elfInfo.absolutePath());
+}
 
 void MainWindow::onImportConfig()
 {
@@ -688,7 +845,6 @@ void MainWindow::applyTestCaseConfig(const QVector<TestCaseConfig> &configs, con
     
     QFont itemFont("Consolas", 10);
     QColor itemForeground("#82aaff");
-    int caseIndex = 1;
     
     for (const auto &config : configs) {
         // 跳过 enabled=false 的用例
@@ -727,8 +883,6 @@ void MainWindow::applyTestCaseConfig(const QVector<TestCaseConfig> &configs, con
         
         appendLog(QString("测试用例已加载: [%1]")
                       .arg(config.name), "INFO");
-        
-        caseIndex++;
     }
 
     appendLog(QString("已成功导入 %1 个测试用例配置").arg(m_testCasesPanel->ui()->listWidgetCases->count()), "SYS");
@@ -980,9 +1134,8 @@ void MainWindow::updateStatusPanel()
     };
 
     // ── 1: 程序状态 ──────────────────────────────────────────────────────────
-    bool appRunning = m_appThread->isAppRunning();
-    QString appStatusText = appRunning ? "运行中" : (m_appStarted ? "已停止" : "等待启动");
-    QString appStatusColor = appRunning ? "#4caf50" : (m_appStarted ? "#f44336" : "#ff9800");
+    QString appStatusText = m_appStarted ? "运行中" : "已停止";
+    QString appStatusColor = m_appStarted ? "#4caf50" : "#f44336";
     setKeyValRaw(labelContent, "程序状态：", appStatusColor, appStatusText);
 
     // ── 2: 序列号 ───────────────────────────────────────────────────────────
