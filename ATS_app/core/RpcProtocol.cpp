@@ -94,49 +94,23 @@ static bool decodeRleWords(const QByteArray &encodedData, int expectedWordCount,
     return offset == encodedData.size() && decodedWords->size() == expectedWordCount;
 }
 
-quint16 crc16Ccitt(const QByteArray &data)
-{
-    quint16 crc = 0xFFFFU;
-
-    for (char byteValue : data) {
-        crc ^= static_cast<quint16>(static_cast<quint8>(byteValue)) << 8;
-        for (int bit = 0; bit < 8; ++bit) {
-            if ((crc & 0x8000U) != 0U) {
-                crc = static_cast<quint16>((crc << 1U) ^ 0x1021U);
-            } else {
-                crc = static_cast<quint16>(crc << 1U);
-            }
-        }
-    }
-
-    return crc;
-}
-
-QByteArray buildResponseFrame(quint8 service, quint8 command, quint16 requestId,
+QByteArray buildResponseFrame(quint8 service, quint8 command,
                               const QByteArray &payload, quint8 flags)
 {
+    Q_UNUSED(flags)
+
+    const int dataLength = 1 + payload.size();
+
     QByteArray frame;
-    frame.reserve(kHeaderSize + payload.size() + kCrcSize);
+    frame.reserve(kHeaderSize + dataLength);
     frame.append(static_cast<char>(kSof0));
     frame.append(static_cast<char>(kSof1));
-    frame.append(static_cast<char>(kVersion));
     frame.append(static_cast<char>(kFrameTypeResponse));
-    frame.append(static_cast<char>(flags));
     frame.append(static_cast<char>(service));
+    frame.append(static_cast<char>(dataLength & 0xFF));
+    frame.append(static_cast<char>((dataLength >> 8) & 0xFF));
     frame.append(static_cast<char>(command));
-    frame.append(static_cast<char>(requestId & 0xFFU));
-    frame.append(static_cast<char>((requestId >> 8) & 0xFFU));
-    frame.append(static_cast<char>(payload.size() & 0xFF));
-    frame.append(static_cast<char>((payload.size() >> 8) & 0xFF));
     frame.append(payload);
-
-    {
-        const QByteArray crcInput = frame.mid(2);
-        const quint16 crc = crc16Ccitt(crcInput);
-        frame.append(static_cast<char>(crc & 0xFFU));
-        frame.append(static_cast<char>((crc >> 8) & 0xFFU));
-    }
-
     return frame;
 }
 
@@ -155,42 +129,36 @@ bool tryExtractFrame(QByteArray *buffer, Frame *frame)
         buffer->remove(0, 1);
     }
 
-    if (buffer->size() < kHeaderSize + kCrcSize) {
+    if (buffer->size() < kHeaderSize) {
         return false;
     }
 
     const char *raw = buffer->constData();
-    const quint8 version = static_cast<quint8>(raw[2]);
-    if (version != kVersion) {
+    const quint8 frameType = static_cast<quint8>(raw[2]);
+    const quint16 dataLength = readLe16(raw + 4);
+
+    if (dataLength == 0) {
         buffer->remove(0, 1);
         return false;
     }
 
-    const quint16 payloadLength = readLe16(raw + 9);
-    if (payloadLength > kMaxPayload) {
-        buffer->remove(0, 1);
-        return false;
-    }
-
-    const int frameSize = kHeaderSize + static_cast<int>(payloadLength) + kCrcSize;
+    const int frameSize = kHeaderSize + static_cast<int>(dataLength);
     if (buffer->size() < frameSize) {
         return false;
     }
 
-    const QByteArray crcInput = buffer->mid(2, kHeaderSize - 2 + payloadLength);
-    const quint16 actualCrc = crc16Ccitt(crcInput);
-    const quint16 expectedCrc = readLe16(raw + kHeaderSize + payloadLength);
-    if (actualCrc != expectedCrc) {
-        buffer->remove(0, 1);
-        return false;
-    }
+    const char *dataPtr = raw + kHeaderSize;
+    const quint8 command = static_cast<quint8>(dataPtr[0]);
+    const int payloadOffset = 1;
 
-    frame->frameType = static_cast<quint8>(raw[3]);
-    frame->flags = static_cast<quint8>(raw[4]);
-    frame->service = static_cast<quint8>(raw[5]);
-    frame->command = static_cast<quint8>(raw[6]);
-    frame->requestId = readLe16(raw + 7);
-    frame->payload = buffer->mid(kHeaderSize, payloadLength);
+    const int payloadLength = static_cast<int>(dataLength) - payloadOffset;
+    frame->frameType = frameType;
+    frame->flags = 0;
+    frame->service = static_cast<quint8>(raw[3]);
+    frame->command = command;
+    frame->payload = (payloadLength > 0)
+        ? QByteArray(dataPtr + payloadOffset, payloadLength)
+        : QByteArray();
 
     buffer->remove(0, frameSize);
     return true;
@@ -203,25 +171,8 @@ bool decodeLogEvent(const Frame &frame, LogEvent *event)
         return false;
     }
 
-    if (frame.payload.size() < 3) {
-        return false;
-    }
-
-    const quint8 levelLength = static_cast<quint8>(frame.payload[0]);
-    if (frame.payload.size() < 1 + levelLength + 2) {
-        return false;
-    }
-
-    const QByteArray levelBytes = frame.payload.mid(1, levelLength);
-    const quint16 messageLength = readLe16(frame.payload.constData() + 1 + levelLength);
-    if (frame.payload.size() < 3 + levelLength + messageLength) {
-        return false;
-    }
-
-    const QByteArray messageBytes = frame.payload.mid(3 + levelLength, messageLength);
-    event->level = QString::fromUtf8(levelBytes).trimmed();
-    event->message = QString::fromUtf8(messageBytes);
-    return !event->level.isEmpty();
+    event->message = QString::fromUtf8(frame.payload);
+    return !event->message.isEmpty();
 }
 
 bool isLcdEvent(const Frame &frame)

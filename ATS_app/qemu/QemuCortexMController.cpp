@@ -120,7 +120,7 @@ bool QemuCortexMController::hasFirmwarePath() const
     return !m_firmwarePath.isEmpty();
 }
 
-bool QemuCortexMController::start(quint16 logPort, quint16 rpcPort, quint16 lcdPort)
+bool QemuCortexMController::start(quint16 serialPort)
 {
     const QFileInfo firmwareInfo(m_firmwarePath);
     const QString qemuExecutablePath = findQemuExecutablePath();
@@ -143,9 +143,7 @@ bool QemuCortexMController::start(quint16 logPort, quint16 rpcPort, quint16 lcdP
 
     m_stdoutBuffer.clear();
     m_stderrBuffer.clear();
-    m_logPort = logPort;
-    m_rpcPort = rpcPort;
-    m_lcdPort = lcdPort;
+    m_serialPort = serialPort;
     const QString icountMode = QString::fromLatin1(kDefaultIcountMode);
 
     arguments << QStringLiteral("-M")
@@ -156,11 +154,7 @@ bool QemuCortexMController::start(quint16 logPort, quint16 rpcPort, quint16 lcdP
               << QStringLiteral("-monitor")
               << QStringLiteral("none")
               << QStringLiteral("-serial")
-              << QStringLiteral("tcp:127.0.0.1:%1").arg(logPort)
-              << QStringLiteral("-serial")
-              << QStringLiteral("tcp:127.0.0.1:%1").arg(rpcPort)
-              << QStringLiteral("-serial")
-              << QStringLiteral("tcp:127.0.0.1:%1").arg(lcdPort)
+              << QStringLiteral("tcp:127.0.0.1:%1").arg(serialPort)
               << QStringLiteral("-kernel")
               << QDir::toNativeSeparators(firmwareInfo.absoluteFilePath())
               << QStringLiteral("-icount")
@@ -199,10 +193,8 @@ bool QemuCortexMController::isRunning() const
 
 void QemuCortexMController::onProcessStarted()
 {
-    emitLog(QStringLiteral("QEMU 已启动，串口桥端口 log=%1 rpc=%2 lcd=%3")
-                .arg(m_logPort)
-                .arg(m_rpcPort)
-                .arg(m_lcdPort),
+    emitLog(QStringLiteral("QEMU 已启动，串口桥端口 serial=%1")
+                .arg(m_serialPort),
             QStringLiteral("SYS"));
     emit started();
 }

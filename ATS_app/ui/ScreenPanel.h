@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QWidget>
+#include <QTimer>
 #include "ui_ScreenPanel.h"
 
 class ScreenPanel : public QWidget
@@ -13,6 +14,10 @@ public:
 
     Ui::ScreenPanel *ui() const { return m_ui; }
 
+    void startRendering();
+    void updateScreenDisplay();
+
 private:
     Ui::ScreenPanel *m_ui;
+    QTimer m_screenTimer;
 };

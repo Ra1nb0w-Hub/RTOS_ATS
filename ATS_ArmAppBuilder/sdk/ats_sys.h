@@ -93,7 +93,7 @@ void ats_free(void *ptr);
  * @param level 等级
  * @param string 日志字符串
  */
-void ats_log_print(const char *level, const char *string);
+void ats_log_print(const char *string);
 
 /**
  * @brief 日志打印
@@ -101,7 +101,7 @@ void ats_log_print(const char *level, const char *string);
  * @param level 等级
  * @param format 日志格式字符串
  */
-void ats_log_printf(const char *level, const char *format, ...);
+void ats_log_printf(const char *format, ...);
 
 /**
  * @brief 设置按键事件

@@ -8,7 +8,7 @@ namespace RpcProtocol
 {
 static constexpr quint8 kSof0 = 0xA5;
 static constexpr quint8 kSof1 = 0x5A;
-static constexpr quint8 kVersion = 0x01;
+static constexpr quint8 kVersion = 0x02;
 static constexpr quint8 kFrameTypeRequest = 1;
 static constexpr quint8 kFrameTypeResponse = 2;
 static constexpr quint8 kFrameTypeEvent = 3;
@@ -36,9 +36,7 @@ static constexpr quint8 kPrinterCommandGetPaperStatus = 8;
 static constexpr quint8 kBitmapEncodingRaw = 0;
 static constexpr quint8 kBitmapEncodingRle8 = 1;
 static constexpr quint8 kBitmapEncodingRle16 = 2;
-static constexpr int kHeaderSize = 11;
-static constexpr int kCrcSize = 2;
-static constexpr int kMaxPayload = 240;
+static constexpr int kHeaderSize = 6;
 
 struct Frame
 {
@@ -46,13 +44,11 @@ struct Frame
     quint8 flags = 0;
     quint8 service = 0;
     quint8 command = 0;
-    quint16 requestId = 0;
     QByteArray payload;
 };
 
 struct LogEvent
 {
-    QString level;
     QString message;
 };
 
@@ -105,8 +101,7 @@ struct PrinterPrintBitmapEvent
     QByteArray bitmapData;
 };
 
-quint16 crc16Ccitt(const QByteArray &data);
-QByteArray buildResponseFrame(quint8 service, quint8 command, quint16 requestId,
+QByteArray buildResponseFrame(quint8 service, quint8 command,
                               const QByteArray &payload = QByteArray(), quint8 flags = 0);
 bool tryExtractFrame(QByteArray *buffer, Frame *frame);
 bool decodeLogEvent(const Frame &frame, LogEvent *event);

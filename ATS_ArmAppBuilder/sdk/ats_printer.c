@@ -1,4 +1,4 @@
-﻿/**
+/**
  * @file ats_printer.c
  * @brief ARM/QEMU 侧 Printer RPC 客户端
  *
@@ -10,13 +10,14 @@
 #include "ats_error.h"
 #include "ats_rpc.h"
 
+#include "FreeRTOS/FreeRTOS.h"
+#include "FreeRTOS/portable.h"
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
 
 #define ATS_PRINTER_TEXT_HEADER_SIZE          1U
 #define ATS_PRINTER_BITMAP_HEADER_SIZE        5U
-#define ATS_PRINTER_BITMAP_MAX_ENCODED_SIZE   (ATS_RPC_MAX_PAYLOAD - ATS_PRINTER_BITMAP_HEADER_SIZE)
 
 static ats_printer_align_mode_t s_align_mode = ATS_PRINTER_ALIGN_MODE_LEFT;
 static ats_printer_font_size_t s_font_size = ATS_PRINTER_FONT_SIZE_NORMAL;
@@ -264,8 +265,10 @@ int ats_printer_get_font_size(ats_printer_font_size_t *size)
 
 int ats_printer_set_print_data(char *data, bool is_end_of_line)
 {
-    uint8_t payload[ATS_RPC_MAX_PAYLOAD];
     size_t text_length;
+    uint16_t payload_size;
+    uint8_t *payload;
+    int status;
 
     if (data == NULL)
     {
@@ -273,9 +276,11 @@ int ats_printer_set_print_data(char *data, bool is_end_of_line)
     }
 
     text_length = strlen(data);
-    if (text_length > (size_t)(ATS_RPC_MAX_PAYLOAD - ATS_PRINTER_TEXT_HEADER_SIZE))
+    payload_size = (uint16_t)(ATS_PRINTER_TEXT_HEADER_SIZE + text_length);
+    payload = (uint8_t *)pvPortMalloc(payload_size);
+    if (payload == NULL)
     {
-        return ATS_RPC_EC_TOO_LARGE;
+        return ATS_RPC_EC_NO_MEMORY;
     }
 
     payload[0] = is_end_of_line ? 1U : 0U;
@@ -284,11 +289,13 @@ int ats_printer_set_print_data(char *data, bool is_end_of_line)
         (void)memcpy(&payload[ATS_PRINTER_TEXT_HEADER_SIZE], data, text_length);
     }
 
-    return ats_rpc_send_event(ATS_RPC_SERVICE_PRINTER,
-                              ATS_RPC_PRINTER_CMD_PRINT_TEXT,
-                              payload,
-                              (uint16_t)(ATS_PRINTER_TEXT_HEADER_SIZE + text_length),
-                              0U);
+    status = ats_rpc_send_event(ATS_RPC_SERVICE_PRINTER,
+                                ATS_RPC_PRINTER_CMD_PRINT_TEXT,
+                                payload,
+                                payload_size,
+                                0U);
+    vPortFree(payload);
+    return status;
 }
 
 int ats_printer_set_print_bitmap(unsigned char *data, int width, int height)
@@ -296,66 +303,43 @@ int ats_printer_set_print_bitmap(unsigned char *data, int width, int height)
     const uint16_t bitmap_width = (uint16_t)width;
     const uint16_t bitmap_height = (uint16_t)height;
     const uint16_t bytes_per_row = (uint16_t)((bitmap_width + 7U) / 8U);
-    uint16_t row_offset = 0U;
+    const uint16_t raw_bytes = (uint16_t)(bytes_per_row * bitmap_height);
+    const uint16_t worst_case = ats_printer_rle8_worst_case_size(raw_bytes);
+    const uint16_t buffer_size = (uint16_t)(ATS_PRINTER_BITMAP_HEADER_SIZE + worst_case);
+    uint8_t *payload;
+    uint16_t encoded_bytes;
+    int status;
 
-    if ((data == NULL) || (width <= 0) || (height <= 0))
+    if ((data == NULL) || (width <= 0) || (height <= 0) || (bytes_per_row == 0U))
     {
         return ATS_EC_INVALID_PARAM;
     }
 
-    if ((bytes_per_row == 0U) ||
-        (ats_printer_rle8_worst_case_size(bytes_per_row) > ATS_PRINTER_BITMAP_MAX_ENCODED_SIZE))
+    payload = (uint8_t *)pvPortMalloc(buffer_size);
+    if (payload == NULL)
     {
-        return ATS_EC_INVALID_PARAM;
+        return ATS_RPC_EC_NO_MEMORY;
     }
 
-    while (row_offset < bitmap_height)
+    ats_printer_write_u16_le(&payload[0], bitmap_width);
+    ats_printer_write_u16_le(&payload[2], bitmap_height);
+    payload[4] = ATS_RPC_BITMAP_ENCODING_RLE8;
+    encoded_bytes = ats_printer_encode_rle8(data, raw_bytes,
+                                            &payload[ATS_PRINTER_BITMAP_HEADER_SIZE],
+                                            worst_case);
+    if (encoded_bytes == 0U)
     {
-        uint8_t payload[ATS_RPC_MAX_PAYLOAD];
-        const uint16_t remaining_rows = (uint16_t)(bitmap_height - row_offset);
-        uint16_t chunk_rows = 1U;
-        const uint8_t *chunk_data = &data[row_offset * bytes_per_row];
-        uint16_t encoded_bytes;
-        int status;
-
-        while (chunk_rows < remaining_rows)
-        {
-            const uint16_t candidate_rows = (uint16_t)(chunk_rows + 1U);
-            const uint16_t candidate_raw_bytes = (uint16_t)(candidate_rows * bytes_per_row);
-            if (ats_printer_rle8_worst_case_size(candidate_raw_bytes) > ATS_PRINTER_BITMAP_MAX_ENCODED_SIZE)
-            {
-                break;
-            }
-
-            chunk_rows = candidate_rows;
-        }
-
-        ats_printer_write_u16_le(&payload[0], bitmap_width);
-        ats_printer_write_u16_le(&payload[2], chunk_rows);
-        payload[4] = ATS_RPC_BITMAP_ENCODING_RLE8;
-        encoded_bytes = ats_printer_encode_rle8(chunk_data,
-                                                (uint16_t)(chunk_rows * bytes_per_row),
-                                                &payload[ATS_PRINTER_BITMAP_HEADER_SIZE],
-                                                ATS_PRINTER_BITMAP_MAX_ENCODED_SIZE);
-        if (encoded_bytes == 0U)
-        {
-            return ATS_RPC_EC_TOO_LARGE;
-        }
-
-        status = ats_rpc_send_event(ATS_RPC_SERVICE_PRINTER,
-                                    ATS_RPC_PRINTER_CMD_PRINT_BITMAP,
-                                    payload,
-                                    (uint16_t)(ATS_PRINTER_BITMAP_HEADER_SIZE + encoded_bytes),
-                                    0U);
-        if (status != ATS_EC_OK)
-        {
-            return status;
-        }
-
-        row_offset = (uint16_t)(row_offset + chunk_rows);
+        vPortFree(payload);
+        return ATS_RPC_EC_TOO_LARGE;
     }
 
-    return ATS_EC_OK;
+    status = ats_rpc_send_event(ATS_RPC_SERVICE_PRINTER,
+                                ATS_RPC_PRINTER_CMD_PRINT_BITMAP,
+                                payload,
+                                (uint16_t)(ATS_PRINTER_BITMAP_HEADER_SIZE + encoded_bytes),
+                                0U);
+    vPortFree(payload);
+    return status;
 }
 
 int ats_printer_set_paper_status(bool status)

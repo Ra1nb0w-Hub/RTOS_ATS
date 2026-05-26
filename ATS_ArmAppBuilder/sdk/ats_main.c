@@ -59,7 +59,7 @@ int __attribute__((weak)) main(void)
 
 void __attribute__((weak)) ats_main(void)
 {
-    ats_log_printf(ATS_LOG_LEVEL_INFO, "Function `ats_main` not define, SDK `ats_main` is running...");
+    ats_log_printf("Function `ats_main` not define, SDK `ats_main` is running...");
 
     while (1)
     {

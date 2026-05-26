@@ -8,19 +8,15 @@ extern "C" {
 #include <stddef.h>
 #include <stdint.h>
 
-#define ATS_RPC_VERSION                1U
 #define ATS_RPC_SOF0                   0xA5U
 #define ATS_RPC_SOF1                   0x5AU
-#define ATS_RPC_MAX_PAYLOAD            240U
-
-#define ATS_RPC_FLAG_NEED_ACK          0x01U
-#define ATS_RPC_FLAG_ERROR             0x02U
+#define ATS_RPC_HEADER_SIZE            6U
 
 #define ATS_RPC_EC_BAD_STATE           (-10)
 #define ATS_RPC_EC_IO                  (-11)
-#define ATS_RPC_EC_CRC                 (-12)
 #define ATS_RPC_EC_FRAME               (-13)
 #define ATS_RPC_EC_TOO_LARGE           (-14)
+#define ATS_RPC_EC_NO_MEMORY           (-15)
 
 typedef enum
 {
@@ -96,9 +92,8 @@ typedef struct
     uint8_t flags;
     uint8_t service;
     uint8_t command;
-    uint16_t request_id;
     uint16_t payload_length;
-    uint8_t payload[ATS_RPC_MAX_PAYLOAD];
+    uint8_t *payload;
 } ats_rpc_frame_t;
 
 int ats_rpc_init(const ats_rpc_transport_t *transport);
@@ -108,10 +103,10 @@ bool ats_rpc_is_initialized(void);
 
 int ats_rpc_send_request(uint8_t service, uint8_t command,
                          const uint8_t *payload, uint16_t payload_length,
-                         uint16_t request_id, uint8_t flags);
+                         uint8_t flags);
 int ats_rpc_send_response(uint8_t service, uint8_t command,
                           const uint8_t *payload, uint16_t payload_length,
-                          uint16_t request_id, uint8_t flags);
+                          uint8_t flags);
 int ats_rpc_send_event(uint8_t service, uint8_t command,
                        const uint8_t *payload, uint16_t payload_length,
                        uint8_t flags);
@@ -125,17 +120,10 @@ int ats_rpc_request(uint8_t service, uint8_t command,
                     uint8_t *response_payload, uint16_t *response_length,
                     uint8_t *response_flags, uint32_t timeout_ms);
 int ats_rpc_receive(ats_rpc_frame_t *frame, uint32_t timeout_ms);
+void ats_rpc_frame_free(ats_rpc_frame_t *frame);
 
-uint16_t ats_rpc_crc16_ccitt(const uint8_t *data, uint16_t length);
-uint16_t ats_rpc_next_request_id(void);
+int ats_rpc_log_event(const char *message);
 
-int ats_rpc_log_event(const char *level, const char *message);
-
-/*
- * Default transport hooks.
- * The board/QEMU port can override these two weak symbols and then call
- * ats_rpc_init_default() to bind the protocol layer to UART/TCP transport.
- */
 int ats_rpc_transport_write(const uint8_t *data, uint16_t length, void *user_data);
 int ats_rpc_transport_read(uint8_t *byte, uint32_t timeout_ms, void *user_data);
 int ats_rpc_log_transport_write(const uint8_t *data, uint16_t length, void *user_data);

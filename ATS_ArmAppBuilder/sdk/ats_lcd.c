@@ -10,6 +10,8 @@
 #include "ats_error.h"
 #include "ats_rpc.h"
 
+#include "FreeRTOS/FreeRTOS.h"
+#include "FreeRTOS/portable.h"
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
@@ -17,8 +19,6 @@
 #define ATS_LCD_RECT_PAYLOAD_SIZE            10U
 #define ATS_LCD_BITMAP1_HEADER_SIZE          14U
 #define ATS_LCD_BITMAP16_HEADER_SIZE         9U
-#define ATS_LCD_BITMAP1_MAX_ENCODED_SIZE     (ATS_RPC_MAX_PAYLOAD - ATS_LCD_BITMAP1_HEADER_SIZE)
-#define ATS_LCD_BITMAP16_MAX_ENCODED_SIZE    (ATS_RPC_MAX_PAYLOAD - ATS_LCD_BITMAP16_HEADER_SIZE)
 
 static unsigned short s_width = 0;
 static unsigned short s_height = 0;
@@ -326,152 +326,89 @@ int ats_lcd_draw_1bit_bitmap(unsigned short x, unsigned short y,
                              bool isTransparent)
 {
     const unsigned short bytes_per_row = (unsigned short)((width + 7U) / 8U);
-    unsigned short row_offset = 0U;
+    const uint16_t raw_bytes = (uint16_t)(bytes_per_row * height);
+    const uint16_t worst_case = rle8_worst_case_size(raw_bytes);
+    const uint16_t buffer_size = (uint16_t)(ATS_LCD_BITMAP1_HEADER_SIZE + worst_case);
+    uint8_t *payload;
+    uint16_t encoded_bytes;
+    int status;
 
-    if ((bitMapData == NULL) || (width == 0U) || (height == 0U))
+    if ((bitMapData == NULL) || (width == 0U) || (height == 0U) || (bytes_per_row == 0U))
     {
         return ATS_EC_INVALID_PARAM;
     }
 
-    if ((bytes_per_row == 0U) ||
-        (rle8_worst_case_size(bytes_per_row) > ATS_LCD_BITMAP1_MAX_ENCODED_SIZE))
+    payload = (uint8_t *)pvPortMalloc(buffer_size);
+    if (payload == NULL)
     {
-        return ATS_EC_INVALID_PARAM;
+        return ATS_RPC_EC_NO_MEMORY;
     }
 
-    while (row_offset < height)
+    write_u16_le(&payload[0], x);
+    write_u16_le(&payload[2], y);
+    write_u16_le(&payload[4], width);
+    write_u16_le(&payload[6], height);
+    write_u16_le(&payload[8], foregroundColor);
+    write_u16_le(&payload[10], backgroundColor);
+    payload[12] = isTransparent ? 1U : 0U;
+    payload[13] = ATS_RPC_BITMAP_ENCODING_RLE8;
+
+    encoded_bytes = encode_rle8(bitMapData, raw_bytes,
+                                &payload[ATS_LCD_BITMAP1_HEADER_SIZE], worst_case);
+    if (encoded_bytes == 0U)
     {
-        uint8_t payload[ATS_RPC_MAX_PAYLOAD];
-        const unsigned short remaining_rows = (unsigned short)(height - row_offset);
-        unsigned short chunk_rows = 1U;
-        const uint8_t *src = &bitMapData[row_offset * bytes_per_row];
-        uint16_t encoded_bytes;
-
-        while (chunk_rows < remaining_rows)
-        {
-            const unsigned short candidate_rows = (unsigned short)(chunk_rows + 1U);
-            const uint16_t candidate_raw_bytes = (uint16_t)(bytes_per_row * candidate_rows);
-            if (rle8_worst_case_size(candidate_raw_bytes) > ATS_LCD_BITMAP1_MAX_ENCODED_SIZE)
-            {
-                break;
-            }
-
-            chunk_rows = candidate_rows;
-        }
-
-        write_u16_le(&payload[0], x);
-        write_u16_le(&payload[2], (unsigned short)(y + row_offset));
-        write_u16_le(&payload[4], width);
-        write_u16_le(&payload[6], chunk_rows);
-        write_u16_le(&payload[8], foregroundColor);
-        write_u16_le(&payload[10], backgroundColor);
-        payload[12] = isTransparent ? 1U : 0U;
-        payload[13] = ATS_RPC_BITMAP_ENCODING_RLE8;
-        encoded_bytes = encode_rle8(src,
-                                    (uint16_t)(bytes_per_row * chunk_rows),
-                                    &payload[ATS_LCD_BITMAP1_HEADER_SIZE],
-                                    ATS_LCD_BITMAP1_MAX_ENCODED_SIZE);
-        if (encoded_bytes == 0U)
-        {
-            return ATS_RPC_EC_TOO_LARGE;
-        }
-
-        {
-            const int status = send_simple_lcd_event(ATS_RPC_LCD_CMD_DRAW_1BIT_BITMAP,
-                                                     payload,
-                                                     (uint16_t)(ATS_LCD_BITMAP1_HEADER_SIZE + encoded_bytes));
-            if (status != ATS_EC_OK)
-            {
-                return status;
-            }
-        }
-
-        row_offset = (unsigned short)(row_offset + chunk_rows);
+        vPortFree(payload);
+        return ATS_RPC_EC_TOO_LARGE;
     }
 
-    return ATS_EC_OK;
+    status = send_simple_lcd_event(ATS_RPC_LCD_CMD_DRAW_1BIT_BITMAP,
+                                   payload,
+                                   (uint16_t)(ATS_LCD_BITMAP1_HEADER_SIZE + encoded_bytes));
+    vPortFree(payload);
+    return status;
 }
 
 int ats_lcd_draw_16bit_bitmap(unsigned short x, unsigned short y,
                               unsigned short width, unsigned short height,
                               unsigned short *bitMapData)
 {
-    unsigned short max_chunk_pixels = 1U;
-    unsigned short row_offset;
+    const uint16_t pixel_count = (uint16_t)(width * height);
+    const uint16_t worst_case = rle16_worst_case_size(pixel_count);
+    const uint16_t buffer_size = (uint16_t)(ATS_LCD_BITMAP16_HEADER_SIZE + worst_case);
+    uint8_t *payload;
+    uint16_t encoded_bytes;
+    int status;
 
     if ((bitMapData == NULL) || (width == 0U) || (height == 0U))
     {
         return ATS_EC_INVALID_PARAM;
     }
 
-    while (rle16_worst_case_size((uint16_t)(max_chunk_pixels + 1U)) <= ATS_LCD_BITMAP16_MAX_ENCODED_SIZE)
+    payload = (uint8_t *)pvPortMalloc(buffer_size);
+    if (payload == NULL)
     {
-        ++max_chunk_pixels;
+        return ATS_RPC_EC_NO_MEMORY;
     }
 
-    if (max_chunk_pixels == 0U)
+    write_u16_le(&payload[0], x);
+    write_u16_le(&payload[2], y);
+    write_u16_le(&payload[4], width);
+    write_u16_le(&payload[6], height);
+    payload[8] = ATS_RPC_BITMAP_ENCODING_RLE16;
+
+    encoded_bytes = encode_rle16(bitMapData, pixel_count,
+                                 &payload[ATS_LCD_BITMAP16_HEADER_SIZE], worst_case);
+    if (encoded_bytes == 0U)
     {
-        return ATS_EC_INVALID_PARAM;
+        vPortFree(payload);
+        return ATS_RPC_EC_TOO_LARGE;
     }
 
-    for (row_offset = 0U; row_offset < height; )
-    {
-        const unsigned short remaining_rows = (unsigned short)(height - row_offset);
-        unsigned short col_offset;
-
-        for (col_offset = 0U; col_offset < width; )
-        {
-            uint8_t payload[ATS_RPC_MAX_PAYLOAD];
-            uint16_t raw_pixels[115];
-            const unsigned short remaining_cols = (unsigned short)(width - col_offset);
-            const unsigned short chunk_width =
-                (remaining_cols < max_chunk_pixels) ? remaining_cols : max_chunk_pixels;
-            const unsigned short chunk_height = (remaining_rows > 0U) ? 1U : 0U;
-            const uint16_t chunk_pixel_count = (uint16_t)(chunk_width * chunk_height);
-            unsigned short chunk_row;
-            uint16_t encoded_bytes;
-
-            write_u16_le(&payload[0], (unsigned short)(x + col_offset));
-            write_u16_le(&payload[2], (unsigned short)(y + row_offset));
-            write_u16_le(&payload[4], chunk_width);
-            write_u16_le(&payload[6], chunk_height);
-            payload[8] = ATS_RPC_BITMAP_ENCODING_RLE16;
-
-            for (chunk_row = 0U; chunk_row < chunk_height; ++chunk_row)
-            {
-                const unsigned short *src =
-                    &bitMapData[(row_offset + chunk_row) * width + col_offset];
-                (void)memcpy(&raw_pixels[chunk_row * chunk_width],
-                             src,
-                             (size_t)chunk_width * sizeof(uint16_t));
-            }
-
-            encoded_bytes = encode_rle16(raw_pixels,
-                                         chunk_pixel_count,
-                                         &payload[ATS_LCD_BITMAP16_HEADER_SIZE],
-                                         ATS_LCD_BITMAP16_MAX_ENCODED_SIZE);
-            if (encoded_bytes == 0U)
-            {
-                return ATS_RPC_EC_TOO_LARGE;
-            }
-
-            {
-                const int status = send_simple_lcd_event(ATS_RPC_LCD_CMD_DRAW_16BIT_BITMAP,
-                                                         payload,
-                                                         (uint16_t)(ATS_LCD_BITMAP16_HEADER_SIZE + encoded_bytes));
-                if (status != ATS_EC_OK)
-                {
-                    return status;
-                }
-            }
-
-            col_offset = (unsigned short)(col_offset + chunk_width);
-        }
-
-        row_offset = (unsigned short)(row_offset + 1U);
-    }
-
-    return ATS_EC_OK;
+    status = send_simple_lcd_event(ATS_RPC_LCD_CMD_DRAW_16BIT_BITMAP,
+                                   payload,
+                                   (uint16_t)(ATS_LCD_BITMAP16_HEADER_SIZE + encoded_bytes));
+    vPortFree(payload);
+    return status;
 }
 
 const unsigned short *ats_lcd_get_framebuffer(void)

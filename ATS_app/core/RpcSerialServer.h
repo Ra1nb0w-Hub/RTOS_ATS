@@ -14,22 +14,16 @@ class RpcSerialServer : public QObject
     Q_OBJECT
 
 public:
-    enum class ChannelRole
-    {
-        Log,
-        Rpc,
-        Lcd
-    };
-
     explicit RpcSerialServer(QObject *parent = nullptr);
     ~RpcSerialServer() override;
 
-    void setChannelRole(ChannelRole role);
-    ChannelRole channelRole() const;
     bool start(quint16 port);
     void stop();
     quint16 listenPort() const;
     bool isListening() const;
+
+signals:
+    void logMessage(const QString &msg, const QString &level);
 
 private slots:
     void onNewConnection();
@@ -43,10 +37,8 @@ private:
     void handleRpcFrame(const RpcProtocol::Frame &frame);
     void handleLcdFrame(const RpcProtocol::Frame &frame);
     void handlePrinterFrame(const RpcProtocol::Frame &frame);
-    QString roleName() const;
 
     QTcpServer *m_server = nullptr;
     QTcpSocket *m_client = nullptr;
     QByteArray m_rxBuffer;
-    ChannelRole m_role = ChannelRole::Rpc;
 };

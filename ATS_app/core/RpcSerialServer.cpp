@@ -20,16 +20,6 @@ RpcSerialServer::~RpcSerialServer()
     stop();
 }
 
-void RpcSerialServer::setChannelRole(ChannelRole role)
-{
-    m_role = role;
-}
-
-RpcSerialServer::ChannelRole RpcSerialServer::channelRole() const
-{
-    return m_role;
-}
-
 bool RpcSerialServer::start(quint16 port)
 {
     if (m_server->isListening()) {
@@ -72,7 +62,7 @@ void RpcSerialServer::onNewConnection()
     if (m_client) {
         newClient->disconnectFromHost();
         newClient->deleteLater();
-        LogManager::logWarn("RPC已有活动连接, 拒绝新的串口连接");
+        LogManager::logWarn("串口已有活动连接, 拒绝新的串口连接");
         return;
     }
 
@@ -82,8 +72,7 @@ void RpcSerialServer::onNewConnection()
     connect(m_client, &QTcpSocket::readyRead, this, &RpcSerialServer::onSocketReadyRead);
     connect(m_client, &QTcpSocket::disconnected, this, &RpcSerialServer::onSocketDisconnected);
 
-    LogManager::logSys(QString("%1客户端已连接: %2:%3")
-                           .arg(roleName())
+    LogManager::logSys(QString("串口客户端已连接: %1:%2")
                            .arg(m_client->peerAddress().toString())
                            .arg(m_client->peerPort()));
 }
@@ -100,7 +89,7 @@ void RpcSerialServer::onSocketReadyRead()
 
 void RpcSerialServer::onSocketDisconnected()
 {
-    LogManager::logSys(QString("%1客户端已断开").arg(roleName()));
+    LogManager::logSys("串口客户端已断开");
     closeClient();
 }
 
@@ -120,15 +109,18 @@ void RpcSerialServer::processIncomingData()
     RpcProtocol::Frame frame;
 
     while (RpcProtocol::tryExtractFrame(&m_rxBuffer, &frame)) {
-        switch (m_role) {
-        case ChannelRole::Log:
+        switch (frame.service) {
+        case RpcProtocol::kServiceLog:
             handleLogFrame(frame);
             break;
-        case ChannelRole::Rpc:
+        case RpcProtocol::kServiceLcd:
+            handleLcdFrame(frame);
+            break;
+        case RpcProtocol::kServiceCore:
+        case RpcProtocol::kServicePrinter:
             handleRpcFrame(frame);
             break;
-        case ChannelRole::Lcd:
-            handleLcdFrame(frame);
+        default:
             break;
         }
     }
@@ -138,7 +130,7 @@ void RpcSerialServer::handleLogFrame(const RpcProtocol::Frame &frame)
 {
     RpcProtocol::LogEvent event;
     if (RpcProtocol::decodeLogEvent(frame, &event)) {
-        LogManager::log(event.level, event.message);
+        emit logMessage(event.message, "INFO");
     }
 }
 
@@ -150,8 +142,7 @@ void RpcSerialServer::handleRpcFrame(const RpcProtocol::Frame &frame)
 
     if (RpcProtocol::isCoreRequest(frame, RpcProtocol::kCoreCommandPing)) {
         m_client->write(RpcProtocol::buildResponseFrame(RpcProtocol::kServiceCore,
-                                                        RpcProtocol::kCoreCommandPing,
-                                                        frame.requestId));
+                                                        RpcProtocol::kCoreCommandPing));
         return;
     }
 
@@ -162,7 +153,6 @@ void RpcSerialServer::handleRpcFrame(const RpcProtocol::Frame &frame)
         payload.append(static_cast<char>(RpcProtocol::kServicePrinter));
         m_client->write(RpcProtocol::buildResponseFrame(RpcProtocol::kServiceCore,
                                                         RpcProtocol::kCoreCommandCapabilities,
-                                                        frame.requestId,
                                                         payload));
         return;
     }
@@ -295,21 +285,6 @@ void RpcSerialServer::handlePrinterFrame(const RpcProtocol::Frame &frame)
         payload.append(ats_printer_get_paper_status() ? '\x01' : '\x00');
         m_client->write(RpcProtocol::buildResponseFrame(RpcProtocol::kServicePrinter,
                                                         RpcProtocol::kPrinterCommandGetPaperStatus,
-                                                        frame.requestId,
                                                         payload));
     }
-}
-
-QString RpcSerialServer::roleName() const
-{
-    switch (m_role) {
-    case ChannelRole::Log:
-        return QStringLiteral("LOG UART");
-    case ChannelRole::Rpc:
-        return QStringLiteral("RPC UART");
-    case ChannelRole::Lcd:
-        return QStringLiteral("LCD UART");
-    }
-
-    return QStringLiteral("UART");
 }

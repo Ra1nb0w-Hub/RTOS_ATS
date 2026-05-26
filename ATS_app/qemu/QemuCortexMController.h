@@ -17,7 +17,7 @@ public:
     QString firmwarePath() const;
     bool hasFirmwarePath() const;
 
-    bool start(quint16 logPort, quint16 rpcPort, quint16 lcdPort);
+    bool start(quint16 serialPort);
     void stop();
     bool isRunning() const;
 
@@ -43,7 +43,5 @@ private:
     QString m_firmwarePath;
     QByteArray m_stdoutBuffer;
     QByteArray m_stderrBuffer;
-    quint16 m_logPort = 0;
-    quint16 m_rpcPort = 0;
-    quint16 m_lcdPort = 0;
+    quint16 m_serialPort = 0;
 };

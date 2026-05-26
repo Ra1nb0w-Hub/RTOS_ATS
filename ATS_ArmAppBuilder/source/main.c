@@ -8,8 +8,9 @@
 
 void ats_main(void)
 {
-    ats_log_printf(ATS_LOG_LEVEL_INFO, "[ARM] ats_main is running...");
-
     while(1)
+    {
+        ats_log_printf("[ARM] ats_main is running...");
         ats_thread_sleep(1000);
+    }
 }

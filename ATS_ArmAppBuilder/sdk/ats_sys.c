@@ -32,11 +32,6 @@ static ats_datetime_t s_datetime_base;
 static uint32_t s_datetime_base_tick_ms = 0U;
 static bool s_datetime_valid = false;
 
-void __attribute__((weak)) ats_platform_log_output(const char *level, const char *message)
-{
-    (void)ats_rpc_log_event(level, message);
-}
-
 static bool ats_is_leap_year(unsigned int year)
 {
     if ((year % 400U) == 0U)
@@ -313,27 +308,22 @@ void ats_free(void *ptr)
     }
 }
 
-void ats_log_print(const char *level, const char *string)
+void ats_log_print(const char *string)
 {
-    if ((level == NULL) || (string == NULL))
+    if (string == NULL)
     {
         return;
     }
 
-    if (s_log_callback != NULL)
-    {
-        s_log_callback(level, string);
-    }
-
-    ats_platform_log_output(level, string);
+    ats_rpc_log_event(string);
 }
 
-void ats_log_printf(const char *level, const char *format, ...)
+void ats_log_printf(const char *format, ...)
 {
     char buffer[256];
     va_list args;
 
-    if ((level == NULL) || (format == NULL))
+    if (format == NULL)
     {
         return;
     }
@@ -342,7 +332,7 @@ void ats_log_printf(const char *level, const char *format, ...)
     (void)vsnprintf(buffer, sizeof(buffer), format, args);
     va_end(args);
 
-    ats_log_print(level, buffer);
+    ats_log_print(buffer);
 }
 
 int ats_keypad_set_event(uint8_t keyCode, bool status)
@@ -623,23 +613,4 @@ int ats_serial_number_set(char *serial_number)
     strncpy(s_serial_number, serial_number, ATS_SERIAL_NUMBER_SIZE - 1U);
     s_serial_number[ATS_SERIAL_NUMBER_SIZE - 1U] = '\0';
     return ATS_EC_OK;
-}
-
-void vApplicationMallocFailedHook(void)
-{
-    ats_log_print(ATS_LOG_LEVEL_ERROR, "FreeRTOS malloc failed.");
-    taskDISABLE_INTERRUPTS();
-    for (;;)
-    {
-    }
-}
-
-void vApplicationStackOverflowHook(TaskHandle_t task, char *task_name)
-{
-    (void)task;
-    ats_log_printf(ATS_LOG_LEVEL_ERROR, "FreeRTOS stack overflow: %s", (task_name != NULL) ? task_name : "unknown");
-    taskDISABLE_INTERRUPTS();
-    for (;;)
-    {
-    }
 }
