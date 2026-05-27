@@ -4,6 +4,7 @@
 #include <QTcpSocket>
 
 #include "RpcProtocol.h"
+#include "Addr2LineResolver.h"
 #include "../log/LogManager.h"
 #include "../sdk/ats_lcd.h"
 #include "../sdk/ats_printer.h"
@@ -51,6 +52,11 @@ quint16 RpcSerialServer::listenPort() const
 bool RpcSerialServer::isListening() const
 {
     return m_server->isListening();
+}
+
+void RpcSerialServer::setElfPath(const QString &path)
+{
+    m_elfPath = path;
 }
 
 void RpcSerialServer::onNewConnection()
@@ -139,10 +145,27 @@ void RpcSerialServer::handleCoreFrame(const RpcProtocol::Frame &frame)
     if (frame.frameType == RpcProtocol::kFrameTypeEvent) {
         if (frame.command == RpcProtocol::kCoreCommandCrash) {
             RpcProtocol::CrashEvent crash;
-            if (RpcProtocol::decodeCrashEvent(frame, &crash)) {
-                QString msg = QString("HardFault at PC=0x%1")
-                    .arg(crash.pc, 8, 16, QChar('0'));
-                LogManager::logError(msg);
+            if (RpcProtocol::decodeCrashEvent(frame, &crash) && !crash.addresses.isEmpty()) {
+                QString msg = QString("Fireware HardFault:");
+
+                if (!m_elfPath.isEmpty()) {
+                    Addr2LineResolver resolver(m_elfPath);
+                    if (resolver.isValid()) {
+                        for (int i = 0; i < crash.addresses.size(); ++i) {
+                            const QString location = resolver.resolve(crash.addresses[i]);
+                            if (!location.isEmpty()) {
+                                if (i == 0) {
+                                    msg += QString("\n[PC] %1").arg(location);
+                                } else {
+                                    msg += QString("\n[LR] %1").arg(location);
+                                }
+                            }
+                        }
+                    } else {
+                        msg += QString("\n  (addr2line 工具或 ELF 文件不可用，无法解析位置)");
+                    }
+                }
+
                 emit crashMessage(msg);
             }
             return;

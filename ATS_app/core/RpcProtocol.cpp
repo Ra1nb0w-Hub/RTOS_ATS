@@ -169,15 +169,24 @@ bool decodeCrashEvent(const Frame &frame, CrashEvent *event)
         return false;
     }
 
-    if (frame.payload.size() != 4) {
+    const int size = frame.payload.size();
+    if (size < 4 || (size % 4) != 0) {
         return false;
     }
 
     const char *data = frame.payload.constData();
-    event->pc = static_cast<quint8>(data[0])
-              | (static_cast<quint32>(static_cast<quint8>(data[1])) << 8)
-              | (static_cast<quint32>(static_cast<quint8>(data[2])) << 16)
-              | (static_cast<quint32>(static_cast<quint8>(data[3])) << 24);
+    const int count = size / 4;
+    event->addresses.clear();
+    event->addresses.reserve(count);
+
+    for (int i = 0; i < count; ++i) {
+        quint32 addr = static_cast<quint8>(data[i * 4])
+                     | (static_cast<quint32>(static_cast<quint8>(data[i * 4 + 1])) << 8)
+                     | (static_cast<quint32>(static_cast<quint8>(data[i * 4 + 2])) << 16)
+                     | (static_cast<quint32>(static_cast<quint8>(data[i * 4 + 3])) << 24);
+        event->addresses.append(addr);
+    }
+
     return true;
 }
 

@@ -61,6 +61,12 @@ MainWindow::MainWindow(QWidget *parent)
     });
 
     connect(m_serialServer, &RpcSerialServer::logMessage, m_logPanel, &LogPanel::appendLog);
+    connect(m_serialServer, &RpcSerialServer::crashMessage, this, [this](const QString &msg) {
+        m_logPanel->appendLog(msg, "ERROR");
+        if (m_qemuController->isRunning()) {
+            m_qemuController->stop();
+        }
+    });
     connect(m_qemuController, &QemuController::logMessage, m_logPanel, &LogPanel::appendLog);
     connect(m_qemuController, &QemuController::started, this, [this]() {
         m_appStarted = true;
@@ -216,6 +222,7 @@ void MainWindow::startQemuWithImportedElf()
     }
 
     m_qemuController->setFirmwarePath(m_importedElfPath);
+    m_serialServer->setElfPath(m_importedElfPath);
     if (!m_qemuController->start(m_serialServer->listenPort())) {
         m_logPanel->appendLog("QEMU 启动失败。", "ERROR");
     }

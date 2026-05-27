@@ -22,6 +22,8 @@ public:
     quint16 listenPort() const;
     bool isListening() const;
 
+    void setElfPath(const QString &path);
+
 signals:
     void logMessage(const QString &msg, const QString &level);
     void crashMessage(const QString &msg);
@@ -43,4 +45,5 @@ private:
     QTcpServer *m_server = nullptr;
     QTcpSocket *m_client = nullptr;
     QByteArray m_rxBuffer;
+    QString m_elfPath;
 };

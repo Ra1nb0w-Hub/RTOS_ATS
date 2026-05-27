@@ -114,7 +114,7 @@ struct DateTime
 
 struct CrashEvent
 {
-    quint32 pc = 0;
+    QVector<quint32> addresses;
 };
 
 QByteArray buildResponseFrame(quint8 service, quint8 command,
