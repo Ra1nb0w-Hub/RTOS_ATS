@@ -3,8 +3,8 @@
 
 #include <stdint.h>
 
-#ifndef ATS_DEMO_HEAP_BYTES
-#define ATS_DEMO_HEAP_BYTES                (24U * 1024U)
+#ifndef ATS_RTOS_RAM_BYTES
+#define ATS_RTOS_RAM_BYTES                 (24U * 1024U)
 #endif
 
 #ifndef ATS_CPU_CLOCK_HZ
@@ -19,9 +19,10 @@
 #define configTICK_RATE_HZ                 ( ( TickType_t ) 1000 )
 #define configMAX_PRIORITIES               5
 #define configMINIMAL_STACK_SIZE           ( ( uint16_t ) 128 )
-#define configTOTAL_HEAP_SIZE              ( ( size_t ) ATS_DEMO_HEAP_BYTES )
+#define configTOTAL_HEAP_SIZE              ( ( size_t ) ATS_RTOS_RAM_BYTES )
 #define configMAX_TASK_NAME_LEN            16
 #define configUSE_TRACE_FACILITY           1
+#define configRECORD_STACK_HIGH_ADDRESS    1
 #define configGENERATE_RUN_TIME_STATS      0
 #define configRUN_TIME_COUNTER_TYPE        uint32_t
 #define configUSE_STATS_FORMATTING_FUNCTIONS 0

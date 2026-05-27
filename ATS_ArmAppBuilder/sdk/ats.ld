@@ -2,8 +2,8 @@ ENTRY(Reset_Handler)
 
 MEMORY
 {
-    FLASH (rx)  : ORIGIN = 0x00000000, LENGTH = @ATS_BOOT_BRAM_KB@K
-    RAM   (rwx) : ORIGIN = 0x20000000, LENGTH = @ATS_EFFECTIVE_BOARD_RAM_KB@K
+    FLASH (rx)  : ORIGIN = 0x00000000, LENGTH = @ATS_BOARD_ROM_BYTES@
+    RAM   (rwx) : ORIGIN = 0x20000000, LENGTH = @ATS_BOARD_RAM_BYTES@
 }
 
 SECTIONS
@@ -71,11 +71,11 @@ SECTIONS
     end = .;
     _end = .;
 
-    .stack ORIGIN(RAM) + LENGTH(RAM) - @ATS_ISR_STACK_BYTES@ (NOLOAD) :
+    .stack ORIGIN(RAM) + LENGTH(RAM) - @ATS_MSP_STACK_BYTES@ (NOLOAD) :
     {
         . = ALIGN(8);
         __StackLimit = .;
-        . = . + @ATS_ISR_STACK_BYTES@;
+        . = . + @ATS_MSP_STACK_BYTES@;
         . = ALIGN(8);
         __StackTop = .;
     } > RAM

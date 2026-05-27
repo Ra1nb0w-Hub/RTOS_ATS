@@ -14,7 +14,6 @@
 #include <string.h>
 
 #define ATS_SERIAL_NUMBER_SIZE      32U
-#define ATS_TRACKED_THREAD_MAX      16U
 #define ATS_WAIT_FOREVER_MS         0xFFFFFFFFU
 
 typedef struct
@@ -23,227 +22,8 @@ typedef struct
     void *args;
 } ats_thread_context_t;
 
-static ats_log_callback_t s_log_callback = NULL;
 static ats_keypad_event_t s_keypad_event = { ATS_KEY_CODE_NONE, false };
-static char s_serial_number[ATS_SERIAL_NUMBER_SIZE] = { 0 };
-static TaskHandle_t s_tracked_threads[ATS_TRACKED_THREAD_MAX] = { 0 };
 static uint32_t s_random_state = 0x13572468UL;
-static ats_datetime_t s_datetime_base;
-static uint32_t s_datetime_base_tick_ms = 0U;
-static bool s_datetime_valid = false;
-
-static bool ats_is_leap_year(unsigned int year)
-{
-    if ((year % 400U) == 0U)
-    {
-        return true;
-    }
-
-    if ((year % 100U) == 0U)
-    {
-        return false;
-    }
-
-    return (year % 4U) == 0U;
-}
-
-static unsigned int ats_days_in_month(unsigned int year, unsigned int month)
-{
-    static const unsigned char s_days_per_month[12] =
-    {
-        31U, 28U, 31U, 30U, 31U, 30U,
-        31U, 31U, 30U, 31U, 30U, 31U
-    };
-
-    if ((month < 1U) || (month > 12U))
-    {
-        return 30U;
-    }
-
-    if ((month == 2U) && ats_is_leap_year(year))
-    {
-        return 29U;
-    }
-
-    return s_days_per_month[month - 1U];
-}
-
-static uint64_t ats_datetime_to_unix_seconds(const ats_datetime_t *datetime)
-{
-    uint64_t days = 0U;
-    unsigned int year;
-    unsigned int month;
-
-    if (datetime == NULL)
-    {
-        return 0U;
-    }
-
-    if ((datetime->uiMonth < 1U) || (datetime->uiMonth > 12U) ||
-        (datetime->uiDay < 1U) || (datetime->uiDay > 31U))
-    {
-        return 0U;
-    }
-
-    for (year = 1970U; year < datetime->uiYear; ++year)
-    {
-        days += ats_is_leap_year(year) ? 366U : 365U;
-    }
-
-    for (month = 1U; month < datetime->uiMonth; ++month)
-    {
-        days += ats_days_in_month(datetime->uiYear, month);
-    }
-
-    days += (uint64_t)(datetime->uiDay - 1U);
-
-    return (((days * 24U) + datetime->uiHour) * 60U + datetime->uiMinute) * 60U + datetime->uiSecond;
-}
-
-static void ats_unix_seconds_to_datetime(uint64_t seconds, ats_datetime_t *datetime)
-{
-    uint64_t days;
-    unsigned int year = 1970U;
-    unsigned int month = 1U;
-
-    if (datetime == NULL)
-    {
-        return;
-    }
-
-    days = seconds / 86400U;
-    seconds %= 86400U;
-
-    while (days >= (uint64_t)(ats_is_leap_year(year) ? 366U : 365U))
-    {
-        days -= ats_is_leap_year(year) ? 366U : 365U;
-        ++year;
-    }
-
-    while (days >= (uint64_t)ats_days_in_month(year, month))
-    {
-        days -= ats_days_in_month(year, month);
-        ++month;
-    }
-
-    datetime->uiYear = year;
-    datetime->uiMonth = month;
-    datetime->uiDay = (unsigned int)days + 1U;
-    datetime->uiHour = (unsigned int)(seconds / 3600U);
-    seconds %= 3600U;
-    datetime->uiMinute = (unsigned int)(seconds / 60U);
-    datetime->uiSecond = (unsigned int)(seconds % 60U);
-}
-
-static bool ats_month_from_abbrev(const char *text, unsigned int *month)
-{
-    static const char * const s_months[12] =
-    {
-        "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-        "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
-    };
-    unsigned int index;
-
-    if ((text == NULL) || (month == NULL))
-    {
-        return false;
-    }
-
-    for (index = 0U; index < 12U; ++index)
-    {
-        if ((text[0] == s_months[index][0]) &&
-            (text[1] == s_months[index][1]) &&
-            (text[2] == s_months[index][2]))
-        {
-            *month = index + 1U;
-            return true;
-        }
-    }
-
-    return false;
-}
-
-static void ats_seed_datetime_from_build(void)
-{
-    unsigned int month = 1U;
-    unsigned int day = 1U;
-    unsigned int year = 1970U;
-    unsigned int hour = 0U;
-    unsigned int minute = 0U;
-    unsigned int second = 0U;
-
-    if (s_datetime_valid)
-    {
-        return;
-    }
-
-    (void)ats_month_from_abbrev(__DATE__, &month);
-    day = (unsigned int)(((__DATE__[4] == ' ') ? 0 : (__DATE__[4] - '0')) * 10U + (unsigned int)(__DATE__[5] - '0'));
-    year = (unsigned int)((__DATE__[7] - '0') * 1000U +
-                          (__DATE__[8] - '0') * 100U +
-                          (__DATE__[9] - '0') * 10U +
-                          (__DATE__[10] - '0'));
-    hour = (unsigned int)((__TIME__[0] - '0') * 10U + (__TIME__[1] - '0'));
-    minute = (unsigned int)((__TIME__[3] - '0') * 10U + (__TIME__[4] - '0'));
-    second = (unsigned int)((__TIME__[6] - '0') * 10U + (__TIME__[7] - '0'));
-
-    s_datetime_base.uiYear = year;
-    s_datetime_base.uiMonth = month;
-    s_datetime_base.uiDay = day;
-    s_datetime_base.uiHour = hour;
-    s_datetime_base.uiMinute = minute;
-    s_datetime_base.uiSecond = second;
-    s_datetime_base_tick_ms = 0U;
-    s_datetime_valid = true;
-}
-
-static uint32_t ats_get_tick_ms_internal(void)
-{
-    const TickType_t ticks = xTaskGetTickCount();
-    return (uint32_t)(((uint64_t)ticks * 1000U) / configTICK_RATE_HZ);
-}
-
-static void ats_register_thread(TaskHandle_t handle)
-{
-    UBaseType_t index;
-
-    if (handle == NULL)
-    {
-        return;
-    }
-
-    taskENTER_CRITICAL();
-    for (index = 0U; index < ATS_TRACKED_THREAD_MAX; ++index)
-    {
-        if (s_tracked_threads[index] == NULL)
-        {
-            s_tracked_threads[index] = handle;
-            break;
-        }
-    }
-    taskEXIT_CRITICAL();
-}
-
-static void ats_unregister_thread(TaskHandle_t handle)
-{
-    UBaseType_t index;
-
-    if (handle == NULL)
-    {
-        return;
-    }
-
-    taskENTER_CRITICAL();
-    for (index = 0U; index < ATS_TRACKED_THREAD_MAX; ++index)
-    {
-        if (s_tracked_threads[index] == handle)
-        {
-            s_tracked_threads[index] = NULL;
-            break;
-        }
-    }
-    taskEXIT_CRITICAL();
-}
 
 static UBaseType_t ats_priority_to_freertos(ats_thread_priority_t priority)
 {
@@ -281,13 +61,7 @@ static void ats_thread_entry(void *args)
         func(func_args);
     }
 
-    ats_unregister_thread(xTaskGetCurrentTaskHandle());
     vTaskDelete(NULL);
-}
-
-void ats_log_set_callback(ats_log_callback_t callback)
-{
-    s_log_callback = callback;
 }
 
 void *ats_malloc(unsigned int size)
@@ -394,8 +168,6 @@ int ats_thread_create(ats_thread_handle_t *handle, const char *name,
         return ATS_EC_INVALID_PARAM;
     }
 
-    ats_register_thread(task_handle);
-
     if (handle != NULL)
     {
         *handle = (ats_thread_handle_t)task_handle;
@@ -420,31 +192,59 @@ int ats_thread_sleep(unsigned int ms)
     return ATS_EC_OK;
 }
 
-int ats_thread_kill_all(void)
+int ats_thread_info(char *buffer, size_t buffer_size)
 {
-    TaskHandle_t handles[ATS_TRACKED_THREAD_MAX];
-    TaskHandle_t current = xTaskGetCurrentTaskHandle();
-    int count = 0;
+    TaskStatus_t *task_status;
+    UBaseType_t task_count;
     UBaseType_t index;
+    size_t offset = 0U;
 
-    taskENTER_CRITICAL();
-    for (index = 0U; index < ATS_TRACKED_THREAD_MAX; ++index)
+    if ((buffer == NULL) || (buffer_size == 0U))
     {
-        handles[index] = s_tracked_threads[index];
-        s_tracked_threads[index] = NULL;
+        return ATS_EC_INVALID_PARAM;
     }
-    taskEXIT_CRITICAL();
 
-    for (index = 0U; index < ATS_TRACKED_THREAD_MAX; ++index)
+    buffer[0] = '\0';
+
+    task_count = uxTaskGetNumberOfTasks();
+    if (task_count == 0U)
     {
-        if ((handles[index] != NULL) && (handles[index] != current))
+        return ATS_EC_OK;
+    }
+
+    task_status = (TaskStatus_t *)pvPortMalloc(task_count * sizeof(TaskStatus_t));
+    if (task_status == NULL)
+    {
+        return ATS_EC_INVALID_PARAM;
+    }
+
+    task_count = uxTaskGetSystemState(task_status, task_count, NULL);
+
+    for (index = 0U; index < task_count; ++index)
+    {
+        const char *name = task_status[index].pcTaskName;
+        const uint32_t remaining_bytes = (uint32_t)(task_status[index].usStackHighWaterMark * sizeof(StackType_t));
+        const uint32_t stack_size = (uint32_t)((task_status[index].pxEndOfStack - task_status[index].pxStackBase + 2) * sizeof(StackType_t));
+        int written;
+
+        written = snprintf(buffer + offset, buffer_size - offset,
+                           "%s,%lu,%lu\n",
+                           (name != NULL) ? name : "unknown",
+                           (unsigned long)remaining_bytes,
+                           (unsigned long)stack_size);
+
+        if ((written < 0) || ((size_t)written >= buffer_size - offset))
         {
-            vTaskDelete(handles[index]);
-            ++count;
+            vPortFree(task_status);
+            return ATS_EC_INVALID_PARAM;
         }
+
+        offset += (size_t)written;
     }
 
-    return count;
+    vPortFree(task_status);
+
+    return ATS_EC_OK;
 }
 
 int ats_mutex_create(ats_mutex_handle_t *handle, const char *name)
@@ -534,45 +334,108 @@ int ats_semaphore_post(ats_semaphore_handle_t *handle)
     return (xSemaphoreGive((SemaphoreHandle_t)(*handle)) == pdTRUE) ? ATS_EC_OK : ATS_EC_INVALID_PARAM;
 }
 
+static int datetime_encode(const ats_datetime_t *dt, uint8_t *buf)
+{
+    buf[0] = (uint8_t)(dt->uiYear & 0xFFU);
+    buf[1] = (uint8_t)((dt->uiYear >> 8) & 0xFFU);
+    buf[2] = (uint8_t)dt->uiMonth;
+    buf[3] = (uint8_t)dt->uiDay;
+    buf[4] = (uint8_t)dt->uiHour;
+    buf[5] = (uint8_t)dt->uiMinute;
+    buf[6] = (uint8_t)dt->uiSecond;
+    return ATS_EC_OK;
+}
+
+static int datetime_decode(ats_datetime_t *dt, const uint8_t *buf, uint16_t len)
+{
+    if (len < 7U)
+    {
+        return ATS_EC_INVALID_PARAM;
+    }
+
+    dt->uiYear   = (unsigned int)buf[0] | ((unsigned int)buf[1] << 8);
+    dt->uiMonth  = (unsigned int)buf[2];
+    dt->uiDay    = (unsigned int)buf[3];
+    dt->uiHour   = (unsigned int)buf[4];
+    dt->uiMinute = (unsigned int)buf[5];
+    dt->uiSecond = (unsigned int)buf[6];
+    return ATS_EC_OK;
+}
+
 int ats_datetime_get(ats_datetime_t *datetime)
 {
-    uint64_t timestamp;
+    uint8_t resp_buf[7];
+    uint16_t resp_len = sizeof(resp_buf);
+    int status;
 
     if (datetime == NULL)
     {
         return ATS_EC_INVALID_PARAM;
     }
 
-    ats_seed_datetime_from_build();
-    timestamp = ats_datetime_to_unix_seconds(&s_datetime_base);
-    timestamp += (uint64_t)((ats_get_tick_ms_internal() - s_datetime_base_tick_ms) / 1000U);
-    ats_unix_seconds_to_datetime(timestamp, datetime);
-    return ATS_EC_OK;
+    status = ats_rpc_request(ATS_RPC_SERVICE_CORE,
+                             ATS_RPC_CORE_GET_DATETIME,
+                             NULL, 0U,
+                             resp_buf, &resp_len,
+                             2000U);
+    if (status != ATS_EC_OK)
+    {
+        return status;
+    }
+
+    return datetime_decode(datetime, resp_buf, resp_len);
 }
 
 int ats_datetime_set(ats_datetime_t *datetime)
 {
+    uint8_t req_buf[7];
+    uint8_t resp_buf[1];
+    uint16_t resp_len = sizeof(resp_buf);
+
     if (datetime == NULL)
     {
         return ATS_EC_INVALID_PARAM;
     }
 
-    s_datetime_base = *datetime;
-    s_datetime_base_tick_ms = ats_get_tick_ms_internal();
-    s_datetime_valid = true;
-    return ATS_EC_OK;
+    (void)datetime_encode(datetime, req_buf);
+
+    return ats_rpc_request(ATS_RPC_SERVICE_CORE,
+                           ATS_RPC_CORE_SET_DATETIME,
+                           req_buf, sizeof(req_buf),
+                           resp_buf, &resp_len,
+                           2000U);
 }
 
 unsigned long ats_timestamp_get(void)
 {
-    ats_seed_datetime_from_build();
-    return (unsigned long)(ats_datetime_to_unix_seconds(&s_datetime_base) +
-                           (uint64_t)((ats_get_tick_ms_internal() - s_datetime_base_tick_ms) / 1000U));
+    uint8_t resp_buf[4];
+    uint16_t resp_len = sizeof(resp_buf);
+    int status;
+    uint32_t timestamp;
+
+    status = ats_rpc_request(ATS_RPC_SERVICE_CORE,
+                             ATS_RPC_CORE_GET_TIMESTAMP,
+                             NULL, 0U,
+                             resp_buf, &resp_len,
+                             2000U);
+    if ((status != ATS_EC_OK) || (resp_len < 4U))
+    {
+        return 0UL;
+    }
+
+    timestamp = (uint32_t)resp_buf[0]
+              | ((uint32_t)resp_buf[1] << 8)
+              | ((uint32_t)resp_buf[2] << 16)
+              | ((uint32_t)resp_buf[3] << 24);
+
+    return (unsigned long)timestamp;
 }
 
 unsigned int ats_tick_get(void)
 {
-    return ats_get_tick_ms_internal();
+    const TickType_t ticks = xTaskGetTickCount();
+
+    return (unsigned int)((ticks * 1000U) / configTICK_RATE_HZ);
 }
 
 int ats_random(unsigned int len, unsigned char *output)
@@ -585,7 +448,7 @@ int ats_random(unsigned int len, unsigned char *output)
     }
 
     taskENTER_CRITICAL();
-    s_random_state ^= ats_get_tick_ms_internal() + 0x9E3779B9UL;
+    s_random_state ^= ats_tick_get() + 0x9E3779B9UL;
     for (index = 0U; index < len; ++index)
     {
         s_random_state ^= s_random_state << 13;
@@ -600,17 +463,28 @@ int ats_random(unsigned int len, unsigned char *output)
 
 char *ats_serial_number_get(void)
 {
-    return s_serial_number;
-}
+    static char s_sn[ATS_SERIAL_NUMBER_SIZE];
+    uint8_t resp_buf[ATS_SERIAL_NUMBER_SIZE - 1U];
+    uint16_t resp_len = sizeof(resp_buf);
+    int status;
 
-int ats_serial_number_set(char *serial_number)
-{
-    if (serial_number == NULL)
+    status = ats_rpc_request(ATS_RPC_SERVICE_CORE,
+                             ATS_RPC_CORE_GET_SERIAL_NUMBER,
+                             NULL, 0U,
+                             resp_buf, &resp_len,
+                             2000U);
+    if ((status == ATS_EC_OK) && (resp_len > 0U))
     {
-        return ATS_EC_INVALID_PARAM;
+        const uint16_t copy_len =
+            (resp_len < (ATS_SERIAL_NUMBER_SIZE - 1U))
+            ? resp_len : (ATS_SERIAL_NUMBER_SIZE - 1U);
+        (void)memcpy(s_sn, resp_buf, copy_len);
+        s_sn[copy_len] = '\0';
+    }
+    else
+    {
+        s_sn[0] = '\0';
     }
 
-    strncpy(s_serial_number, serial_number, ATS_SERIAL_NUMBER_SIZE - 1U);
-    s_serial_number[ATS_SERIAL_NUMBER_SIZE - 1U] = '\0';
-    return ATS_EC_OK;
+    return s_sn;
 }

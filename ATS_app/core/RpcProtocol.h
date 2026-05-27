@@ -13,12 +13,14 @@ static constexpr quint8 kFrameTypeRequest = 1;
 static constexpr quint8 kFrameTypeResponse = 2;
 static constexpr quint8 kFrameTypeEvent = 3;
 static constexpr quint8 kServiceCore = 1;
-static constexpr quint8 kServiceLog = 2;
-static constexpr quint8 kServiceLcd = 16;
-static constexpr quint8 kServicePrinter = 17;
-static constexpr quint8 kCoreCommandPing = 1;
-static constexpr quint8 kCoreCommandCapabilities = 2;
-static constexpr quint8 kLogCommandWrite = 1;
+static constexpr quint8 kServiceLcd = 2;
+static constexpr quint8 kServicePrinter = 3;
+static constexpr quint8 kCoreCommandWriteLog = 1;
+static constexpr quint8 kCoreCommandCrash = 2;
+static constexpr quint8 kCoreCommandSetDateTime = 3;
+static constexpr quint8 kCoreCommandGetDateTime = 4;
+static constexpr quint8 kCoreCommandGetTimestamp = 5;
+static constexpr quint8 kCoreCommandGetSerialNumber = 6;
 static constexpr quint8 kLcdCommandInit = 1;
 static constexpr quint8 kLcdCommandDrawRectangle = 2;
 static constexpr quint8 kLcdCommandFillRectangle = 3;
@@ -36,12 +38,11 @@ static constexpr quint8 kPrinterCommandGetPaperStatus = 8;
 static constexpr quint8 kBitmapEncodingRaw = 0;
 static constexpr quint8 kBitmapEncodingRle8 = 1;
 static constexpr quint8 kBitmapEncodingRle16 = 2;
-static constexpr int kHeaderSize = 6;
+static constexpr int kHeaderSize = 7;
 
 struct Frame
 {
     quint8 frameType = 0;
-    quint8 flags = 0;
     quint8 service = 0;
     quint8 command = 0;
     QByteArray payload;
@@ -101,12 +102,29 @@ struct PrinterPrintBitmapEvent
     QByteArray bitmapData;
 };
 
+struct DateTime
+{
+    quint16 year = 0;
+    quint8 month = 0;
+    quint8 day = 0;
+    quint8 hour = 0;
+    quint8 minute = 0;
+    quint8 second = 0;
+};
+
+struct CrashEvent
+{
+    quint32 pc = 0;
+};
+
 QByteArray buildResponseFrame(quint8 service, quint8 command,
-                              const QByteArray &payload = QByteArray(), quint8 flags = 0);
+                              const QByteArray &payload = QByteArray());
 bool tryExtractFrame(QByteArray *buffer, Frame *frame);
 bool decodeLogEvent(const Frame &frame, LogEvent *event);
-bool isLcdEvent(const Frame &frame);
+bool decodeCrashEvent(const Frame &frame, CrashEvent *event);
 bool isCoreRequest(const Frame &frame, quint8 expectedCommand);
+bool decodeCoreDateTimeRequest(const Frame &frame, DateTime *dt);
+bool isLcdEvent(const Frame &frame);
 bool decodeLcdInitEvent(const Frame &frame, LcdInitEvent *event);
 bool decodeLcdRectEvent(const Frame &frame, quint8 expectedCommand, LcdRectEvent *event);
 bool decodeLcdBitmap1Event(const Frame &frame, LcdBitmap1Event *event);

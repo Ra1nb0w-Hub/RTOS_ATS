@@ -95,11 +95,9 @@ static bool decodeRleWords(const QByteArray &encodedData, int expectedWordCount,
 }
 
 QByteArray buildResponseFrame(quint8 service, quint8 command,
-                              const QByteArray &payload, quint8 flags)
+                              const QByteArray &payload)
 {
-    Q_UNUSED(flags)
-
-    const int dataLength = 1 + payload.size();
+    const int dataLength = payload.size();
 
     QByteArray frame;
     frame.reserve(kHeaderSize + dataLength);
@@ -107,9 +105,9 @@ QByteArray buildResponseFrame(quint8 service, quint8 command,
     frame.append(static_cast<char>(kSof1));
     frame.append(static_cast<char>(kFrameTypeResponse));
     frame.append(static_cast<char>(service));
+    frame.append(static_cast<char>(command));
     frame.append(static_cast<char>(dataLength & 0xFF));
     frame.append(static_cast<char>((dataLength >> 8) & 0xFF));
-    frame.append(static_cast<char>(command));
     frame.append(payload);
     return frame;
 }
@@ -135,29 +133,18 @@ bool tryExtractFrame(QByteArray *buffer, Frame *frame)
 
     const char *raw = buffer->constData();
     const quint8 frameType = static_cast<quint8>(raw[2]);
-    const quint16 dataLength = readLe16(raw + 4);
+    const quint16 payloadLength = readLe16(raw + 5);
 
-    if (dataLength == 0) {
-        buffer->remove(0, 1);
-        return false;
-    }
-
-    const int frameSize = kHeaderSize + static_cast<int>(dataLength);
+    const int frameSize = kHeaderSize + static_cast<int>(payloadLength);
     if (buffer->size() < frameSize) {
         return false;
     }
 
-    const char *dataPtr = raw + kHeaderSize;
-    const quint8 command = static_cast<quint8>(dataPtr[0]);
-    const int payloadOffset = 1;
-
-    const int payloadLength = static_cast<int>(dataLength) - payloadOffset;
     frame->frameType = frameType;
-    frame->flags = 0;
     frame->service = static_cast<quint8>(raw[3]);
-    frame->command = command;
+    frame->command = static_cast<quint8>(raw[4]);
     frame->payload = (payloadLength > 0)
-        ? QByteArray(dataPtr + payloadOffset, payloadLength)
+        ? QByteArray(raw + kHeaderSize, payloadLength)
         : QByteArray();
 
     buffer->remove(0, frameSize);
@@ -167,7 +154,7 @@ bool tryExtractFrame(QByteArray *buffer, Frame *frame)
 bool decodeLogEvent(const Frame &frame, LogEvent *event)
 {
     if (!event ||
-        !isFrameForCommand(frame, kServiceLog, kLogCommandWrite)) {
+        !isFrameForCommand(frame, kServiceCore, kCoreCommandWriteLog)) {
         return false;
     }
 
@@ -175,9 +162,23 @@ bool decodeLogEvent(const Frame &frame, LogEvent *event)
     return !event->message.isEmpty();
 }
 
-bool isLcdEvent(const Frame &frame)
+bool decodeCrashEvent(const Frame &frame, CrashEvent *event)
 {
-    return frame.frameType == kFrameTypeEvent && frame.service == kServiceLcd;
+    if (!event ||
+        !isFrameForCommand(frame, kServiceCore, kCoreCommandCrash)) {
+        return false;
+    }
+
+    if (frame.payload.size() != 4) {
+        return false;
+    }
+
+    const char *data = frame.payload.constData();
+    event->pc = static_cast<quint8>(data[0])
+              | (static_cast<quint32>(static_cast<quint8>(data[1])) << 8)
+              | (static_cast<quint32>(static_cast<quint8>(data[2])) << 16)
+              | (static_cast<quint32>(static_cast<quint8>(data[3])) << 24);
+    return true;
 }
 
 bool isCoreRequest(const Frame &frame, quint8 expectedCommand)
@@ -185,6 +186,33 @@ bool isCoreRequest(const Frame &frame, quint8 expectedCommand)
     return frame.frameType == kFrameTypeRequest &&
            frame.service == kServiceCore &&
            frame.command == expectedCommand;
+}
+
+bool decodeCoreDateTimeRequest(const Frame &frame, DateTime *dt)
+{
+    if (!dt || !isCoreRequest(frame, kCoreCommandSetDateTime)) {
+        return false;
+    }
+
+    if (frame.payload.size() != 7) {
+        return false;
+    }
+
+    const char *data = frame.payload.constData();
+    dt->year   = static_cast<quint8>(data[0]) | (static_cast<quint16>(static_cast<quint8>(data[1])) << 8);
+    dt->month  = static_cast<quint8>(data[2]);
+    dt->day    = static_cast<quint8>(data[3]);
+    dt->hour   = static_cast<quint8>(data[4]);
+    dt->minute = static_cast<quint8>(data[5]);
+    dt->second = static_cast<quint8>(data[6]);
+
+    return dt->month >= 1 && dt->month <= 12 &&
+           dt->day >= 1 && dt->day <= 31;
+}
+
+bool isLcdEvent(const Frame &frame)
+{
+    return frame.frameType == kFrameTypeEvent && frame.service == kServiceLcd;
 }
 
 bool decodeLcdInitEvent(const Frame &frame, LcdInitEvent *event)

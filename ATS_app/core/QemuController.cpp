@@ -1,13 +1,18 @@
-#include "QemuCortexMController.h"
+#include "QemuController.h"
 
 #include <QCoreApplication>
 #include <QDir>
 #include <QFileInfo>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QProcess>
 #include <QProcessEnvironment>
 #include <QSet>
 #include <QStandardPaths>
 #include <QStringList>
+#include <QTcpServer>
+#include <QTcpSocket>
+#include <QTimer>
 
 namespace
 {
@@ -86,41 +91,47 @@ QString processErrorToText(QProcess::ProcessError error)
 }
 }
 
-QemuCortexMController::QemuCortexMController(QObject *parent)
+QemuController::QemuController(QObject *parent)
     : QObject(parent)
     , m_process(new QProcess(this))
+    , m_qmpSocket(new QTcpSocket(this))
 {
-    connect(m_process, &QProcess::started, this, &QemuCortexMController::onProcessStarted);
-    connect(m_process, &QProcess::readyReadStandardOutput, this, &QemuCortexMController::onReadyReadStandardOutput);
-    connect(m_process, &QProcess::readyReadStandardError, this, &QemuCortexMController::onReadyReadStandardError);
-    connect(m_process,
-            qOverload<int, QProcess::ExitStatus>(&QProcess::finished),
-            this,
-            &QemuCortexMController::onProcessFinished);
-    connect(m_process, &QProcess::errorOccurred, this, &QemuCortexMController::onProcessErrorOccurred);
+    connect(m_process, &QProcess::started, this, &QemuController::onProcessStarted);
+    connect(m_process, &QProcess::readyReadStandardOutput, this, &QemuController::onReadyReadStandardOutput);
+    connect(m_process, &QProcess::readyReadStandardError, this, &QemuController::onReadyReadStandardError);
+    connect(m_process, qOverload<int, QProcess::ExitStatus>(&QProcess::finished), this, &QemuController::onProcessFinished);
+    connect(m_process, &QProcess::errorOccurred, this, &QemuController::onProcessErrorOccurred);
+
+    connect(m_qmpSocket, &QTcpSocket::connected, this, &QemuController::onQmpConnected);
+    connect(m_qmpSocket, &QTcpSocket::disconnected, this, &QemuController::onQmpDisconnected);
+    connect(m_qmpSocket, &QTcpSocket::readyRead, this, &QemuController::onQmpReadyRead);
 }
 
-QemuCortexMController::~QemuCortexMController()
+QemuController::~QemuController()
 {
+    if (m_qmpSocket->state() == QAbstractSocket::ConnectedState) {
+        m_qmpSocket->disconnectFromHost();
+    }
     stop();
 }
 
-void QemuCortexMController::setFirmwarePath(const QString &firmwarePath)
+void QemuController::setFirmwarePath(const QString &firmwarePath)
 {
     m_firmwarePath = QDir::fromNativeSeparators(QFileInfo(firmwarePath).absoluteFilePath());
 }
 
-QString QemuCortexMController::firmwarePath() const
+
+QString QemuController::firmwarePath() const
 {
     return m_firmwarePath;
 }
 
-bool QemuCortexMController::hasFirmwarePath() const
+bool QemuController::hasFirmwarePath() const
 {
     return !m_firmwarePath.isEmpty();
 }
 
-bool QemuCortexMController::start(quint16 serialPort)
+bool QemuController::start(quint16 serialPort)
 {
     const QFileInfo firmwareInfo(m_firmwarePath);
     const QString qemuExecutablePath = findQemuExecutablePath();
@@ -143,7 +154,13 @@ bool QemuCortexMController::start(quint16 serialPort)
 
     m_stdoutBuffer.clear();
     m_stderrBuffer.clear();
+    m_qmpBuffer.clear();
     m_serialPort = serialPort;
+    m_qmpNegotiated = false;
+    m_shuttingDown = false;
+
+    m_qmpPort = findFreePort();
+
     const QString icountMode = QString::fromLatin1(kDefaultIcountMode);
 
     arguments << QStringLiteral("-M")
@@ -151,8 +168,8 @@ bool QemuCortexMController::start(quint16 serialPort)
               << QStringLiteral("-cpu")
               << QString::fromLatin1(kDefaultCpuType)
               << QStringLiteral("-nographic")
-              << QStringLiteral("-monitor")
-              << QStringLiteral("none")
+              << QStringLiteral("-qmp")
+              << QStringLiteral("tcp:127.0.0.1:%1,server=on,wait=off").arg(m_qmpPort)
               << QStringLiteral("-serial")
               << QStringLiteral("tcp:127.0.0.1:%1").arg(serialPort)
               << QStringLiteral("-kernel")
@@ -170,13 +187,26 @@ bool QemuCortexMController::start(quint16 serialPort)
     m_process->setProcessEnvironment(processEnvironment);
     m_process->setWorkingDirectory(qemuDirectory);
     m_process->start(QDir::toNativeSeparators(qemuExecutablePath), arguments);
-    return m_process->waitForStarted(3000);
+
+    if (!m_process->waitForStarted(3000)) {
+        return false;
+    }
+
+    connectToQmp();
+    return true;
 }
 
-void QemuCortexMController::stop()
+void QemuController::stop()
 {
     if (!isRunning()) {
         return;
+    }
+
+    if (m_qmpSocket->state() == QAbstractSocket::ConnectedState && m_qmpNegotiated && !m_shuttingDown) {
+        shutdownViaQmp();
+        if (m_process->waitForFinished(3000)) {
+            return;
+        }
     }
 
     m_process->terminate();
@@ -186,20 +216,21 @@ void QemuCortexMController::stop()
     }
 }
 
-bool QemuCortexMController::isRunning() const
+bool QemuController::isRunning() const
 {
     return m_process->state() != QProcess::NotRunning;
 }
 
-void QemuCortexMController::onProcessStarted()
+void QemuController::onProcessStarted()
 {
-    emitLog(QStringLiteral("QEMU 已启动，串口桥端口 serial=%1")
-                .arg(m_serialPort),
+    emitLog(QStringLiteral("QEMU 已启动，端口信息：serial=%1, qmp=%2")
+                .arg(m_serialPort)
+                .arg(m_qmpPort),
             QStringLiteral("SYS"));
     emit started();
 }
 
-void QemuCortexMController::onProcessFinished(int exitCode, int exitStatus)
+void QemuController::onProcessFinished(int exitCode, int exitStatus)
 {
     const QProcess::ExitStatus processExitStatus = static_cast<QProcess::ExitStatus>(exitStatus);
 
@@ -215,27 +246,27 @@ void QemuCortexMController::onProcessFinished(int exitCode, int exitStatus)
     emit stopped();
 }
 
-void QemuCortexMController::onProcessErrorOccurred(int error)
+void QemuController::onProcessErrorOccurred(int error)
 {
     emitLog(processErrorToText(static_cast<QProcess::ProcessError>(error)), QStringLiteral("ERROR"));
 }
 
-void QemuCortexMController::onReadyReadStandardOutput()
+void QemuController::onReadyReadStandardOutput()
 {
     processBufferedOutput(&m_stdoutBuffer, m_process->readAllStandardOutput(), QStringLiteral("INFO"));
 }
 
-void QemuCortexMController::onReadyReadStandardError()
+void QemuController::onReadyReadStandardError()
 {
     processBufferedOutput(&m_stderrBuffer, m_process->readAllStandardError(), QStringLiteral("ERROR"));
 }
 
-void QemuCortexMController::emitLog(const QString &message, const QString &level)
+void QemuController::emitLog(const QString &message, const QString &level)
 {
     emit logMessage(message, level);
 }
 
-void QemuCortexMController::processBufferedOutput(QByteArray *buffer, const QByteArray &chunk, const QString &level)
+void QemuController::processBufferedOutput(QByteArray *buffer, const QByteArray &chunk, const QString &level)
 {
     int newlineIndex = -1;
 
@@ -258,7 +289,7 @@ void QemuCortexMController::processBufferedOutput(QByteArray *buffer, const QByt
     }
 }
 
-void QemuCortexMController::flushBufferedOutput(QByteArray *buffer, const QString &level)
+void QemuController::flushBufferedOutput(QByteArray *buffer, const QString &level)
 {
     if (!buffer || buffer->trimmed().isEmpty()) {
         if (buffer) {
@@ -271,7 +302,7 @@ void QemuCortexMController::flushBufferedOutput(QByteArray *buffer, const QStrin
     buffer->clear();
 }
 
-QString QemuCortexMController::findQemuExecutablePath() const
+QString QemuController::findQemuExecutablePath() const
 {
     const QString environmentOverride =
         qEnvironmentVariable("ATS_QEMU_SYSTEM_ARM");
@@ -298,4 +329,96 @@ QString QemuCortexMController::findQemuExecutablePath() const
     }
 
     return QString();
+}
+
+quint16 QemuController::findFreePort() const
+{
+    QTcpServer server;
+    if (server.listen(QHostAddress::LocalHost, 0)) {
+        quint16 port = server.serverPort();
+        server.close();
+        return port;
+    }
+    return 0;
+}
+
+void QemuController::connectToQmp()
+{
+    if (m_qmpPort == 0) {
+        emitLog(QStringLiteral("QMP 端口无效，无法连接"), QStringLiteral("ERROR"));
+        return;
+    }
+
+    m_qmpSocket->connectToHost(QHostAddress::LocalHost, m_qmpPort);
+}
+
+void QemuController::onQmpConnected()
+{
+
+}
+
+void QemuController::onQmpDisconnected()
+{
+    m_qmpNegotiated = false;
+}
+
+void QemuController::onQmpReadyRead()
+{
+    m_qmpBuffer.append(m_qmpSocket->readAll());
+
+    while (true) {
+        const int newlineIndex = m_qmpBuffer.indexOf('\n');
+        if (newlineIndex < 0) {
+            break;
+        }
+
+        QByteArray line = m_qmpBuffer.left(newlineIndex);
+        if (line.endsWith('\r')) {
+            line.chop(1);
+        }
+        m_qmpBuffer.remove(0, newlineIndex + 1);
+
+        if (!line.trimmed().isEmpty()) {
+            handleQmpMessage(line);
+        }
+    }
+}
+
+void QemuController::handleQmpMessage(const QByteArray &message)
+{
+    QJsonParseError parseError;
+    QJsonDocument doc = QJsonDocument::fromJson(message, &parseError);
+
+    if (parseError.error != QJsonParseError::NoError) {
+        return;
+    }
+
+    const QJsonObject obj = doc.object();
+
+    if (obj.contains(QStringLiteral("QMP"))) {
+        sendQmpCommand(QByteArrayLiteral("{\"execute\":\"qmp_capabilities\"}"));
+    } 
+    else if (obj.contains(QStringLiteral("return"))) {
+        if (!m_qmpNegotiated) {
+            m_qmpNegotiated = true;
+        }
+    }
+}
+
+void QemuController::sendQmpCommand(const QByteArray &command)
+{
+    if (m_qmpSocket->state() != QAbstractSocket::ConnectedState) {
+        return;
+    }
+
+    QByteArray data = command + '\n';
+    m_qmpSocket->write(data);
+    m_qmpSocket->flush();
+}
+
+void QemuController::shutdownViaQmp()
+{
+    m_shuttingDown = true;
+    emitLog(QStringLiteral("通过 QMP 发送关闭指令..."), QStringLiteral("SYS"));
+    sendQmpCommand(QByteArrayLiteral("{\"execute\":\"quit\"}"));
 }

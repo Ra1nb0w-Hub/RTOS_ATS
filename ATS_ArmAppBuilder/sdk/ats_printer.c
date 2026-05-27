@@ -155,7 +155,7 @@ static void ats_printer_write_u16_le(uint8_t *buffer, uint16_t value)
  */
 static int ats_printer_send_simple_event(uint8_t command)
 {
-    return ats_rpc_send_event(ATS_RPC_SERVICE_PRINTER, command, NULL, 0U, 0U);
+    return ats_rpc_send_event(ATS_RPC_SERVICE_PRINTER, command, NULL, 0U);
 }
 
 /**
@@ -182,7 +182,6 @@ static int ats_printer_query_paper_status(bool *paper_status)
                              0U,
                              response_payload,
                              &response_length,
-                             NULL,
                              100U);
     if ((status != ATS_EC_OK) || (response_length != 1U))
     {
@@ -219,8 +218,7 @@ int ats_printer_set_align_mode(ats_printer_align_mode_t align)
     return ats_rpc_send_event(ATS_RPC_SERVICE_PRINTER,
                               ATS_RPC_PRINTER_CMD_SET_ALIGN,
                               payload,
-                              sizeof(payload),
-                              0U);
+                              sizeof(payload));
 }
 
 int ats_printer_get_align_mode(ats_printer_align_mode_t *align)
@@ -248,8 +246,7 @@ int ats_printer_set_font_size(ats_printer_font_size_t size)
     return ats_rpc_send_event(ATS_RPC_SERVICE_PRINTER,
                               ATS_RPC_PRINTER_CMD_SET_FONT_SIZE,
                               payload,
-                              sizeof(payload),
-                              0U);
+                              sizeof(payload));
 }
 
 int ats_printer_get_font_size(ats_printer_font_size_t *size)
@@ -292,8 +289,7 @@ int ats_printer_set_print_data(char *data, bool is_end_of_line)
     status = ats_rpc_send_event(ATS_RPC_SERVICE_PRINTER,
                                 ATS_RPC_PRINTER_CMD_PRINT_TEXT,
                                 payload,
-                                payload_size,
-                                0U);
+                                payload_size);
     vPortFree(payload);
     return status;
 }
@@ -336,8 +332,7 @@ int ats_printer_set_print_bitmap(unsigned char *data, int width, int height)
     status = ats_rpc_send_event(ATS_RPC_SERVICE_PRINTER,
                                 ATS_RPC_PRINTER_CMD_PRINT_BITMAP,
                                 payload,
-                                (uint16_t)(ATS_PRINTER_BITMAP_HEADER_SIZE + encoded_bytes),
-                                0U);
+                                (uint16_t)(ATS_PRINTER_BITMAP_HEADER_SIZE + encoded_bytes));
     vPortFree(payload);
     return status;
 }
@@ -351,8 +346,7 @@ int ats_printer_set_paper_status(bool status)
     return ats_rpc_send_event(ATS_RPC_SERVICE_PRINTER,
                               ATS_RPC_PRINTER_CMD_SET_PAPER_STATUS,
                               payload,
-                              sizeof(payload),
-                              0U);
+                              sizeof(payload));
 }
 
 bool ats_printer_get_paper_status(void)

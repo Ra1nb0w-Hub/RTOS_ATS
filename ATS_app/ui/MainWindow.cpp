@@ -26,7 +26,7 @@ MainWindow::MainWindow(QWidget *parent)
     , m_runner(new TestRunner(this))
     , m_logManager(LogManager::instance())
     , m_appThread(new AppThread(this))
-    , m_qemuController(new QemuCortexMController(this))
+    , m_qemuController(new QemuController(this))
     , m_serialServer(new RpcSerialServer(this))
 {
     ui->setupUi(this);
@@ -61,14 +61,14 @@ MainWindow::MainWindow(QWidget *parent)
     });
 
     connect(m_serialServer, &RpcSerialServer::logMessage, m_logPanel, &LogPanel::appendLog);
-    connect(m_qemuController, &QemuCortexMController::logMessage, m_logPanel, &LogPanel::appendLog);
-    connect(m_qemuController, &QemuCortexMController::started, this, [this]() {
+    connect(m_qemuController, &QemuController::logMessage, m_logPanel, &LogPanel::appendLog);
+    connect(m_qemuController, &QemuController::started, this, [this]() {
         m_appStarted = true;
         m_buttonsPanel->setAppStarted(true);
         m_statusPanel->setAppStarted(true);
         m_testCasesPanel->setAppStarted(true);
     });
-    connect(m_qemuController, &QemuCortexMController::stopped, this, [this]() {
+    connect(m_qemuController, &QemuController::stopped, this, [this]() {
         m_appStarted = false;
         m_buttonsPanel->setAppStarted(false);
         m_statusPanel->setAppStarted(false);

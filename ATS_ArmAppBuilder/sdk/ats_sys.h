@@ -4,25 +4,9 @@
 extern "C" {
 #endif
 
+#include <stddef.h>
 #include <stdint.h>
 #include <stdbool.h>
-
-// 日志等级
-#define ATS_LOG_LEVEL_INFO "INFO"        // 信息
-#define ATS_LOG_LEVEL_WARN "WARN"        // 警告
-#define ATS_LOG_LEVEL_ERROR "ERROR"      // 错误
-#define ATS_LOG_LEVEL_DEBUG "DEBUG"      // 调试
-
-// 日志回调函数类型（由 Qt 层注册，C 层调用）
-typedef void (*ats_log_callback_t)(const char *level, const char *msg);
-
-/**
- * @brief 注册日志输出回调
- *
- * @param callback 回调函数指针，传 NULL 可取消注册
- * @note  由 Qt/C++ 层（LogManager）在初始化时调用一次
- */
-void ats_log_set_callback(ats_log_callback_t callback);
 
 // 按键码
 typedef enum {
@@ -146,11 +130,17 @@ int ats_thread_create(ats_thread_handle_t *handle, const char *name, ats_thread_
 int ats_thread_sleep(unsigned int ms);
 
 /**
- * @brief 终止所有通过 ats_thread_create 创建的线程
+ * @brief 获取所有线程信息
  * 
- * @return 终止的线程数量
+ * @note 线程信息格式:
+ * 线程名称,线程栈剩余大小,线程栈分配大小\n
+ * 
+ * @param buffer 线程信息缓冲区
+ * @param buffer_size 线程信息缓冲区大小
+ * 
+ * @return 0:成功 <0:失败
  */
-int ats_thread_kill_all(void);
+int ats_thread_info(char *buffer, size_t buffer_size);
 
 /**
  * @brief 创建互斥锁

@@ -10,7 +10,7 @@ extern "C" {
 
     void __attribute__((weak)) ats_main(void)
     {
-        ats_log_print(ATS_LOG_LEVEL_WARN, "未找到App定义的主入口函数(ats_main), App运行失败");
+        ats_log_print("未找到App定义的主入口函数(ats_main), App运行失败");
     }
 #ifdef __cplusplus
 }

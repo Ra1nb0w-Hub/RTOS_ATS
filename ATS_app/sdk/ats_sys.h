@@ -7,14 +7,8 @@ extern "C" {
 #include <stdint.h>
 #include <stdbool.h>
 
-// 日志等级
-#define ATS_LOG_LEVEL_INFO "INFO"        // 信息
-#define ATS_LOG_LEVEL_WARN "WARN"        // 警告
-#define ATS_LOG_LEVEL_ERROR "ERROR"      // 错误
-#define ATS_LOG_LEVEL_DEBUG "DEBUG"      // 调试
-
 // 日志回调函数类型（由 Qt 层注册，C 层调用）
-typedef void (*ats_log_callback_t)(const char *level, const char *msg);
+typedef void (*ats_log_callback_t)(const char *msg);
 
 /**
  * @brief 注册日志输出回调
@@ -88,7 +82,7 @@ void ats_free(void *ptr);
  * @param level 等级
  * @param string 日志字符串
  */
-void ats_log_print(const char *level, const char *string);
+void ats_log_print(const char *string);
 
 /**
  * @brief 日志打印
@@ -96,7 +90,7 @@ void ats_log_print(const char *level, const char *string);
  * @param level 等级
  * @param format 日志格式字符串
  */
-void ats_log_printf(const char *level, const char *format, ...);
+void ats_log_printf(const char *format, ...);
 
 /**
  * @brief 设置按键事件

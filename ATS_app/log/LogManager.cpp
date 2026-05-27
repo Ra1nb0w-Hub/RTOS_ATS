@@ -9,9 +9,9 @@
 LogManager *LogManager::s_instance = nullptr;
 
 /* ─── C 桥接回调（被 ats_sys.c 文件调用）──────────────────────────────────── */
-static void c_log_callback(const char *level, const char *msg)
+static void c_log_callback(const char *msg)
 {
-    LogManager::log(QString::fromUtf8(level), QString::fromUtf8(msg));
+    LogManager::logInfo(QString::fromUtf8(msg));
 }
 
 LogManager::LogManager(QObject *parent)

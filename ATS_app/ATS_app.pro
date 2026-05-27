@@ -35,7 +35,6 @@ INCLUDEPATH += \
 # ─── Sources ──────────────────────────────────────────────────────────────────
 SOURCES += \
     qt_main.cpp \
-    qemu/QemuCortexMController.cpp \
     ui/MainWindow.cpp \
     ui/ScreenPanel.cpp \
     ui/ButtonsPanel.cpp \
@@ -47,6 +46,7 @@ SOURCES += \
     core/TestRunner.cpp \
     core/AppThread.cpp \
     core/KeySimulator.cpp \
+    core/QemuController.cpp \
     core/RpcProtocol.cpp \
     core/RpcSerialServer.cpp \
     lua/LuaEngine.cpp \
@@ -60,7 +60,6 @@ SOURCES += \
     app/main.c
 
 HEADERS += \
-    qemu/QemuCortexMController.h \
     ui/MainWindow.h \
     ui/ScreenPanel.h \
     ui/ButtonsPanel.h \
@@ -72,6 +71,7 @@ HEADERS += \
     core/TestRunner.h \
     core/AppThread.h \
     core/KeySimulator.h \
+    core/QemuController.h \
     core/RpcProtocol.h \
     core/RpcSerialServer.h \
     log/LogManager.h \
@@ -98,12 +98,15 @@ FORMS += \
 DEFINES += ATS_SIMULATOR \
            ATS
 
-# ─── 部署 Lua 脚本到 exe 目录 ─────────────────────────────────────────────────
-# 编译后将 scripts/ 目录复制到输出目录，使 TestRunner 能在运行时找到脚本
+# ─── 部署 scripts、tools 目录
 win32 {
-    copyScripts.commands = $(COPY_DIR) \"$$shell_path($$PWD/scripts)\" \"$$shell_path($$OUT_PWD/$$LIB_SUBDIR/scripts)\"
+    copyScripts.commands = $(COPY_DIR) /d \"$$shell_path($$PWD/scripts)\" \"$$shell_path($$OUT_PWD/$$LIB_SUBDIR/scripts)\"
     QMAKE_EXTRA_TARGETS += copyScripts
     POST_TARGETDEPS += copyScripts
+
+    copyTools.commands = $(COPY_DIR) /d \"$$shell_path($$PWD/tools)\" \"$$shell_path($$OUT_PWD/$$LIB_SUBDIR/tools)\"
+    QMAKE_EXTRA_TARGETS += copyTools
+    POST_TARGETDEPS += copyTools
 }
 
 # ─── Default rules ────────────────────────────────────────────────────────────

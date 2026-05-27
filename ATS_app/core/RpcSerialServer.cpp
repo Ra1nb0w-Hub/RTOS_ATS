@@ -7,6 +7,7 @@
 #include "../log/LogManager.h"
 #include "../sdk/ats_lcd.h"
 #include "../sdk/ats_printer.h"
+#include "../sdk/ats_sys.h"
 
 RpcSerialServer::RpcSerialServer(QObject *parent)
     : QObject(parent)
@@ -110,13 +111,12 @@ void RpcSerialServer::processIncomingData()
 
     while (RpcProtocol::tryExtractFrame(&m_rxBuffer, &frame)) {
         switch (frame.service) {
-        case RpcProtocol::kServiceLog:
-            handleLogFrame(frame);
+        case RpcProtocol::kServiceCore:
+            handleCoreFrame(frame);
             break;
         case RpcProtocol::kServiceLcd:
             handleLcdFrame(frame);
             break;
-        case RpcProtocol::kServiceCore:
         case RpcProtocol::kServicePrinter:
             handleRpcFrame(frame);
             break;
@@ -134,26 +134,93 @@ void RpcSerialServer::handleLogFrame(const RpcProtocol::Frame &frame)
     }
 }
 
+void RpcSerialServer::handleCoreFrame(const RpcProtocol::Frame &frame)
+{
+    if (frame.frameType == RpcProtocol::kFrameTypeEvent) {
+        if (frame.command == RpcProtocol::kCoreCommandCrash) {
+            RpcProtocol::CrashEvent crash;
+            if (RpcProtocol::decodeCrashEvent(frame, &crash)) {
+                QString msg = QString("HardFault at PC=0x%1")
+                    .arg(crash.pc, 8, 16, QChar('0'));
+                LogManager::logError(msg);
+                emit crashMessage(msg);
+            }
+            return;
+        }
+
+        if (frame.command == RpcProtocol::kCoreCommandWriteLog)
+        {
+            handleLogFrame(frame);
+            return;
+        }
+    }
+
+    if (frame.frameType != RpcProtocol::kFrameTypeRequest || !m_client) {
+        return;
+    }
+
+    if (RpcProtocol::isCoreRequest(frame, RpcProtocol::kCoreCommandGetDateTime)) {
+        ats_datetime_t dt;
+        if (ats_datetime_get(&dt) == 0) {
+            QByteArray payload(7, '\0');
+            payload[0] = static_cast<char>(dt.uiYear & 0xFF);
+            payload[1] = static_cast<char>((dt.uiYear >> 8) & 0xFF);
+            payload[2] = static_cast<char>(dt.uiMonth);
+            payload[3] = static_cast<char>(dt.uiDay);
+            payload[4] = static_cast<char>(dt.uiHour);
+            payload[5] = static_cast<char>(dt.uiMinute);
+            payload[6] = static_cast<char>(dt.uiSecond);
+            m_client->write(RpcProtocol::buildResponseFrame(
+                RpcProtocol::kServiceCore, RpcProtocol::kCoreCommandGetDateTime, payload));
+        }
+        return;
+    }
+
+    if (RpcProtocol::isCoreRequest(frame, RpcProtocol::kCoreCommandSetDateTime)) {
+        RpcProtocol::DateTime dt;
+        if (RpcProtocol::decodeCoreDateTimeRequest(frame, &dt)) {
+            ats_datetime_t atsDt;
+            atsDt.uiYear   = dt.year;
+            atsDt.uiMonth  = dt.month;
+            atsDt.uiDay    = dt.day;
+            atsDt.uiHour   = dt.hour;
+            atsDt.uiMinute = dt.minute;
+            atsDt.uiSecond = dt.second;
+            ats_datetime_set(&atsDt);
+            m_client->write(RpcProtocol::buildResponseFrame(
+                RpcProtocol::kServiceCore, RpcProtocol::kCoreCommandSetDateTime));
+        }
+        return;
+    }
+
+    if (RpcProtocol::isCoreRequest(frame, RpcProtocol::kCoreCommandGetTimestamp)) {
+        unsigned long ts = ats_timestamp_get();
+        quint32 val = static_cast<quint32>(ts);
+        QByteArray payload(4, '\0');
+        payload[0] = static_cast<char>(val & 0xFF);
+        payload[1] = static_cast<char>((val >> 8) & 0xFF);
+        payload[2] = static_cast<char>((val >> 16) & 0xFF);
+        payload[3] = static_cast<char>((val >> 24) & 0xFF);
+        m_client->write(RpcProtocol::buildResponseFrame(
+            RpcProtocol::kServiceCore, RpcProtocol::kCoreCommandGetTimestamp, payload));
+        return;
+    }
+
+    if (RpcProtocol::isCoreRequest(frame, RpcProtocol::kCoreCommandGetSerialNumber)) {
+        char *sn = ats_serial_number_get();
+        QByteArray payload;
+        if (sn != nullptr && sn[0] != '\0') {
+            payload = QByteArray(sn, static_cast<int>(strlen(sn)));
+        }
+        m_client->write(RpcProtocol::buildResponseFrame(
+            RpcProtocol::kServiceCore, RpcProtocol::kCoreCommandGetSerialNumber, payload));
+        return;
+    }
+}
+
 void RpcSerialServer::handleRpcFrame(const RpcProtocol::Frame &frame)
 {
     if (!m_client) {
-        return;
-    }
-
-    if (RpcProtocol::isCoreRequest(frame, RpcProtocol::kCoreCommandPing)) {
-        m_client->write(RpcProtocol::buildResponseFrame(RpcProtocol::kServiceCore,
-                                                        RpcProtocol::kCoreCommandPing));
-        return;
-    }
-
-    if (RpcProtocol::isCoreRequest(frame, RpcProtocol::kCoreCommandCapabilities)) {
-        QByteArray payload;
-        payload.append(static_cast<char>(RpcProtocol::kServiceLog));
-        payload.append(static_cast<char>(RpcProtocol::kServiceLcd));
-        payload.append(static_cast<char>(RpcProtocol::kServicePrinter));
-        m_client->write(RpcProtocol::buildResponseFrame(RpcProtocol::kServiceCore,
-                                                        RpcProtocol::kCoreCommandCapabilities,
-                                                        payload));
         return;
     }
 

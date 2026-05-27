@@ -24,6 +24,7 @@ public:
 
 signals:
     void logMessage(const QString &msg, const QString &level);
+    void crashMessage(const QString &msg);
 
 private slots:
     void onNewConnection();
@@ -37,6 +38,7 @@ private:
     void handleRpcFrame(const RpcProtocol::Frame &frame);
     void handleLcdFrame(const RpcProtocol::Frame &frame);
     void handlePrinterFrame(const RpcProtocol::Frame &frame);
+    void handleCoreFrame(const RpcProtocol::Frame &frame);
 
     QTcpServer *m_server = nullptr;
     QTcpSocket *m_client = nullptr;

@@ -90,17 +90,17 @@ void ats_log_set_callback(ats_log_callback_t callback)
     s_log_callback = callback;
 }
 
-void ats_log_print(const char *level, const char *string)
+void ats_log_print(const char *string)
 {
-    if (s_log_callback && level && string)
+    if (s_log_callback && string)
     {
-        s_log_callback(level, string);
+        s_log_callback(string);
     }
 }
 
-void ats_log_printf(const char *level, const char *format, ...)
+void ats_log_printf(const char *format, ...)
 {
-    if (!s_log_callback || !level || !format)
+    if (!format)
         return;
 
     char buf[2048];
@@ -109,7 +109,7 @@ void ats_log_printf(const char *level, const char *format, ...)
     vsnprintf(buf, sizeof(buf), format, args);
     va_end(args);
 
-    s_log_callback(level, buf);
+    ats_log_print(buf);
 }
 
 /* =========================================================

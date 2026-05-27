@@ -10,7 +10,7 @@
 #include "core/TestRunner.h"
 #include "core/AppThread.h"
 #include "log/LogManager.h"
-#include "qemu/QemuCortexMController.h"
+#include "core/QemuController.h"
 #include "core/RpcSerialServer.h"
 #include "sdk/ats_sys.h"
 #include "sdk/ats_printer.h"
@@ -53,7 +53,7 @@ protected:
     TestRunner     *m_runner;
     LogManager     *m_logManager;
     AppThread      *m_appThread;
-    QemuCortexMController *m_qemuController;
+    QemuController *m_qemuController;
     RpcSerialServer *m_serialServer;
     ScreenPanel    *m_screenPanel = nullptr;
     ButtonsPanel   *m_buttonsPanel = nullptr;

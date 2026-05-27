@@ -14,15 +14,49 @@ if /I "%~1"=="-h" goto :help
 if /I "%~1"=="--help" goto :help
 if /I "%~1"=="/?" goto :help
 
-set "HEAP_KB=%~1"
-set "ISR_STACK_KB=%~2"
-set "MAIN_STACK_KB=%~3"
-set "BOARD_RAM_KB=%~4"
+set "MSP_STACK_KB=%~1"
+set "RTOS_RAM_KB=%~2"
+set "BOARD_RAM_KB=%~3"
+set "BOARD_ROM_KB=%~4"
 
-if not defined HEAP_KB set "HEAP_KB=2048"
-if not defined ISR_STACK_KB set "ISR_STACK_KB=4"
-if not defined MAIN_STACK_KB set "MAIN_STACK_KB=256"
-if not defined BOARD_RAM_KB set "BOARD_RAM_KB=4096"
+if not defined MSP_STACK_KB set "MSP_STACK_KB=4"
+if not defined RTOS_RAM_KB set "RTOS_RAM_KB=256"
+if not defined BOARD_RAM_KB set "BOARD_RAM_KB=1024"
+if not defined BOARD_ROM_KB set "BOARD_ROM_KB=1024"
+
+if %MSP_STACK_KB%==0 (
+    echo ERROR: Parameter `MSP_STACK_KB` must not be 0
+    exit /b 1
+)
+if %RTOS_RAM_KB%==0 (
+    echo ERROR: Parameter `RTOS_RAM_KB` must not be 0
+    exit /b 1
+)
+if %BOARD_RAM_KB%==0 (
+    echo ERROR: Parameter `BOARD_RAM_KB` must not be 0
+    exit /b 1
+)
+if %BOARD_ROM_KB%==0 (
+    echo ERROR: Parameter `BOARD_ROM_KB` must not be 0
+    exit /b 1
+)
+
+echo Parameter `MSP_STACK_KB`: %MSP_STACK_KB%
+echo Parameter `RTOS_RAM_KB`: %RTOS_RAM_KB%
+echo Parameter `BOARD_RAM_KB`: %BOARD_RAM_KB%
+echo Parameter `BOARD_ROM_KB`: %BOARD_ROM_KB%
+
+set /a "SUM_RAM=RTOS_RAM_KB + MSP_STACK_KB"
+if %SUM_RAM% gtr %BOARD_RAM_KB% (
+    echo ERROR: MSP_STACK_KB^(%MSP_STACK_KB%K^) + RTOS_RAM_KB^(%RTOS_RAM_KB%K^) = %SUM_RAM%K exceeds BOARD_RAM_KB^(%BOARD_RAM_KB%K^)
+    exit /b 1
+)
+
+set /a "MAX_RAM=4096"
+if %BOARD_RAM_KB% gtr %MAX_RAM% (
+    echo ERROR: BOARD_RAM_KB^(%BOARD_RAM_KB%K^) exceeds MPS2 AN385 maximum RAM of %MAX_RAM%K ^(4MB^)
+    exit /b 1
+)
 
 call :ResolveTool CMAKE_EXE ATS_CMAKE "%SCRIPT_DIR%\tools\cmake\bin\cmake.exe" cmake.exe
 if errorlevel 1 exit /b 1
@@ -34,9 +68,9 @@ if not exist "%ARM_TOOLCHAIN_BIN_DIR%\arm-none-eabi-gcc.exe" (
 )
 set "ATS_ARM_TOOLCHAIN_BIN_DIR=%ARM_TOOLCHAIN_BIN_DIR%"
 
-echo Resolved cmake: %CMAKE_EXE%
-echo Resolved make: %MAKE_EXE%
-echo Resolved ARM GCC bin: %ATS_ARM_TOOLCHAIN_BIN_DIR%
+@REM echo Resolved cmake: %CMAKE_EXE%
+@REM echo Resolved make: %MAKE_EXE%
+@REM echo Resolved ARM GCC bin: %ATS_ARM_TOOLCHAIN_BIN_DIR%
 
 if not exist "%BUILD_DIR%" mkdir "%BUILD_DIR%" >nul 2>&1
 if errorlevel 1 (
@@ -44,7 +78,7 @@ if errorlevel 1 (
     exit /b 1
 )
 
-"%CMAKE_EXE%" -S "%SCRIPT_DIR%" -B "%BUILD_DIR%" -G "MinGW Makefiles" -DCMAKE_MAKE_PROGRAM:FILEPATH=%MAKE_EXE% -DCMAKE_TOOLCHAIN_FILE:FILEPATH=%TOOLCHAIN_FILE% -DATS_BOARD_RAM_KB=%BOARD_RAM_KB% -DATS_DEMO_HEAP_KB=%HEAP_KB% -DATS_ISR_STACK_KB=%ISR_STACK_KB% -DATS_DEMO_MAIN_STACK_KB=%MAIN_STACK_KB%
+"%CMAKE_EXE%" -S "%SCRIPT_DIR%" -B "%BUILD_DIR%" -G "MinGW Makefiles" -DCMAKE_MAKE_PROGRAM:FILEPATH=%MAKE_EXE% -DCMAKE_TOOLCHAIN_FILE:FILEPATH=%TOOLCHAIN_FILE% -DATS_MSP_STACK_KB=%MSP_STACK_KB% -DATS_RTOS_RAM_KB=%RTOS_RAM_KB% -DATS_BOARD_RAM_KB=%BOARD_RAM_KB% -DATS_BOARD_ROM_KB=%BOARD_ROM_KB%
 if errorlevel 1 exit /b %errorlevel%
 
 "%CMAKE_EXE%" --build "%BUILD_DIR%"
@@ -60,11 +94,11 @@ exit /b 0
 
 :help
 echo Usage:
-echo   build_app.bat [HeapKb] [IsrStackKb] [MainStackKb] [BoardRamKb]
+echo   build_app.bat [MSPStackKb] [RTOSRamKb] [BoardRamKb] [BoardRomKb]
 echo   build_app.bat clean
 echo.
 echo Defaults:
-echo   HeapKb=4096  IsrStackKb=4  MainStackKb=256  BoardRamKb=4096
+echo   MSPStackKb=4  RTOSRamKb=256  BoardRamKb=1024  BoardRomKb=1024
 exit /b 0
 
 :ResolveTool
