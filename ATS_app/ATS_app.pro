@@ -45,7 +45,6 @@ SOURCES += \
     core/TestCase.cpp \
     core/TestRunner.cpp \
     core/AppThread.cpp \
-    core/KeySimulator.cpp \
     core/QemuController.cpp \
     core/RpcProtocol.cpp \
     core/RpcSerialServer.cpp \
@@ -71,7 +70,6 @@ HEADERS += \
     core/TestCase.h \
     core/TestRunner.h \
     core/AppThread.h \
-    core/KeySimulator.h \
     core/QemuController.h \
     core/RpcProtocol.h \
     core/RpcSerialServer.h \

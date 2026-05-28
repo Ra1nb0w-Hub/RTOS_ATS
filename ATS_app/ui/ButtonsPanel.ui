@@ -144,7 +144,7 @@
          </widget>
         </item>
         <item row="1" column="2">
-         <widget class="QPushButton" name="btnDeviceVolDown">
+         <widget class="QPushButton" name="btnDeviceFunc2">
           <property name="styleSheet">
            <string>QPushButton { background-color: #37474f; color: #eceff1; border: 1px solid #546e7a; border-radius: 6px; font-size: 11px; font-weight: bold; padding: 4px 8px; } QPushButton:hover { background-color: #455a64; } QPushButton:pressed { background-color: #263238; }</string>
           </property>
@@ -194,7 +194,7 @@
          </widget>
         </item>
         <item row="6" column="0">
-         <widget class="QPushButton" name="btnDeviceAsterisk">
+         <widget class="QPushButton" name="btnDeviceStar">
           <property name="styleSheet">
            <string notr="true">QPushButton { background-color: #37474f; color: #eceff1; border: 1px solid #546e7a; border-radius: 6px; font-size: 11px; font-weight: bold; padding: 4px 8px; } QPushButton:hover { background-color: #455a64; } QPushButton:pressed { background-color: #263238; }</string>
           </property>
@@ -214,7 +214,7 @@
          </widget>
         </item>
         <item row="1" column="1">
-         <widget class="QPushButton" name="btnDeviceVolUp">
+         <widget class="QPushButton" name="btnDeviceFunc1">
           <property name="styleSheet">
            <string>QPushButton { background-color: #37474f; color: #eceff1; border: 1px solid #546e7a; border-radius: 6px; font-size: 11px; font-weight: bold; padding: 4px 8px; } QPushButton:hover { background-color: #455a64; } QPushButton:pressed { background-color: #263238; }</string>
           </property>
@@ -254,7 +254,7 @@
          </widget>
         </item>
         <item row="1" column="3">
-         <widget class="QPushButton" name="btnDeviceReplay">
+         <widget class="QPushButton" name="btnDeviceFunc3">
           <property name="styleSheet">
            <string>QPushButton { background-color: #37474f; color: #eceff1; border: 1px solid #546e7a; border-radius: 6px; font-size: 11px; font-weight: bold; padding: 4px 8px; } QPushButton:hover { background-color: #455a64; } QPushButton:pressed { background-color: #263238; }</string>
           </property>

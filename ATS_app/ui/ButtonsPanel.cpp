@@ -43,24 +43,129 @@ void ButtonsPanel::setupConnections()
         onDeviceButtonReleased(ATS_KEY_CODE_NONE);
     });
 
-    connect(m_ui->btnDeviceVolUp, &QPushButton::pressed, this, [this]() {
-        onDeviceButtonPressed(ATS_KEY_CODE_VOLUME_INC);
+    connect(m_ui->btnDeviceFunc1, &QPushButton::pressed, this, [this]() {
+        onDeviceButtonPressed(ATS_KEY_CODE_FUNC1);
     });
-    connect(m_ui->btnDeviceVolUp, &QPushButton::released, this, [this]() {
+    connect(m_ui->btnDeviceFunc1, &QPushButton::released, this, [this]() {
         onDeviceButtonReleased(ATS_KEY_CODE_NONE);
     });
 
-    connect(m_ui->btnDeviceVolDown, &QPushButton::pressed, this, [this]() {
-        onDeviceButtonPressed(ATS_KEY_CODE_VOLUME_DEC);
+    connect(m_ui->btnDeviceFunc2, &QPushButton::pressed, this, [this]() {
+        onDeviceButtonPressed(ATS_KEY_CODE_FUNC2);
     });
-    connect(m_ui->btnDeviceVolDown, &QPushButton::released, this, [this]() {
+    connect(m_ui->btnDeviceFunc2, &QPushButton::released, this, [this]() {
         onDeviceButtonReleased(ATS_KEY_CODE_NONE);
     });
 
-    connect(m_ui->btnDeviceReplay, &QPushButton::pressed, this, [this]() {
-        onDeviceButtonPressed(ATS_KEY_CODE_REPLAY);
+    connect(m_ui->btnDeviceFunc3, &QPushButton::pressed, this, [this]() {
+        onDeviceButtonPressed(ATS_KEY_CODE_FUNC3);
     });
-    connect(m_ui->btnDeviceReplay, &QPushButton::released, this, [this]() {
+    connect(m_ui->btnDeviceFunc3, &QPushButton::released, this, [this]() {
+        onDeviceButtonReleased(ATS_KEY_CODE_NONE);
+    });
+
+    connect(m_ui->btnDeviceCancel, &QPushButton::pressed, this, [this]() {
+        onDeviceButtonPressed(ATS_KEY_CODE_CANCEL);
+    });
+    connect(m_ui->btnDeviceCancel, &QPushButton::released, this, [this]() {
+        onDeviceButtonReleased(ATS_KEY_CODE_NONE);
+    });
+
+    connect(m_ui->btnDeviceClear, &QPushButton::pressed, this, [this]() {
+        onDeviceButtonPressed(ATS_KEY_CODE_CLEAR);
+    });
+    connect(m_ui->btnDeviceClear, &QPushButton::released, this, [this]() {
+        onDeviceButtonReleased(ATS_KEY_CODE_NONE);
+    });
+
+    connect(m_ui->btnDeviceEnter, &QPushButton::pressed, this, [this]() {
+        onDeviceButtonPressed(ATS_KEY_CODE_ENTER);
+    });
+    connect(m_ui->btnDeviceEnter, &QPushButton::released, this, [this]() {
+        onDeviceButtonReleased(ATS_KEY_CODE_NONE);
+    });
+
+    connect(m_ui->btnDeviceStar, &QPushButton::pressed, this, [this]() {
+        onDeviceButtonPressed(ATS_KEY_CODE_STAR);
+    });
+    connect(m_ui->btnDeviceStar, &QPushButton::released, this, [this]() {
+        onDeviceButtonReleased(ATS_KEY_CODE_NONE);
+    });
+
+    connect(m_ui->btnDevicePound, &QPushButton::pressed, this, [this]() {
+        onDeviceButtonPressed(ATS_KEY_CODE_POUND);
+    });
+    connect(m_ui->btnDevicePound, &QPushButton::released, this, [this]() {
+        onDeviceButtonReleased(ATS_KEY_CODE_NONE);
+    });
+
+    connect(m_ui->btnDeviceNum0, &QPushButton::pressed, this, [this]() {
+        onDeviceButtonPressed(ATS_KEY_CODE_NUM0);
+    });
+    connect(m_ui->btnDeviceNum0, &QPushButton::released, this, [this]() {
+        onDeviceButtonReleased(ATS_KEY_CODE_NONE);
+    });
+
+    connect(m_ui->btnDeviceNum1, &QPushButton::pressed, this, [this]() {
+        onDeviceButtonPressed(ATS_KEY_CODE_NUM1);
+    });
+    connect(m_ui->btnDeviceNum1, &QPushButton::released, this, [this]() {
+        onDeviceButtonReleased(ATS_KEY_CODE_NONE);
+    });
+
+    connect(m_ui->btnDeviceNum2, &QPushButton::pressed, this, [this]() {
+        onDeviceButtonPressed(ATS_KEY_CODE_NUM2);
+    });
+    connect(m_ui->btnDeviceNum2, &QPushButton::released, this, [this]() {
+        onDeviceButtonReleased(ATS_KEY_CODE_NONE);
+    });
+
+    connect(m_ui->btnDeviceNum3, &QPushButton::pressed, this, [this]() {
+        onDeviceButtonPressed(ATS_KEY_CODE_NUM3);
+    });
+    connect(m_ui->btnDeviceNum3, &QPushButton::released, this, [this]() {
+        onDeviceButtonReleased(ATS_KEY_CODE_NONE);
+    });
+
+    connect(m_ui->btnDeviceNum4, &QPushButton::pressed, this, [this]() {
+        onDeviceButtonPressed(ATS_KEY_CODE_NUM4);
+    });
+    connect(m_ui->btnDeviceNum4, &QPushButton::released, this, [this]() {
+        onDeviceButtonReleased(ATS_KEY_CODE_NONE);
+    });
+
+    connect(m_ui->btnDeviceNum5, &QPushButton::pressed, this, [this]() {
+        onDeviceButtonPressed(ATS_KEY_CODE_NUM5);
+    });
+    connect(m_ui->btnDeviceNum5, &QPushButton::released, this, [this]() {
+        onDeviceButtonReleased(ATS_KEY_CODE_NONE);
+    });
+
+    connect(m_ui->btnDeviceNum6, &QPushButton::pressed, this, [this]() {
+        onDeviceButtonPressed(ATS_KEY_CODE_NUM6);
+    });
+    connect(m_ui->btnDeviceNum6, &QPushButton::released, this, [this]() {
+        onDeviceButtonReleased(ATS_KEY_CODE_NONE);
+    });
+
+    connect(m_ui->btnDeviceNum7, &QPushButton::pressed, this, [this]() {
+        onDeviceButtonPressed(ATS_KEY_CODE_NUM7);
+    });
+    connect(m_ui->btnDeviceNum7, &QPushButton::released, this, [this]() {
+        onDeviceButtonReleased(ATS_KEY_CODE_NONE);
+    });
+
+    connect(m_ui->btnDeviceNum8, &QPushButton::pressed, this, [this]() {
+        onDeviceButtonPressed(ATS_KEY_CODE_NUM8);
+    });
+    connect(m_ui->btnDeviceNum8, &QPushButton::released, this, [this]() {
+        onDeviceButtonReleased(ATS_KEY_CODE_NONE);
+    });
+
+    connect(m_ui->btnDeviceNum9, &QPushButton::pressed, this, [this]() {
+        onDeviceButtonPressed(ATS_KEY_CODE_NUM9);
+    });
+    connect(m_ui->btnDeviceNum9, &QPushButton::released, this, [this]() {
         onDeviceButtonReleased(ATS_KEY_CODE_NONE);
     });
 }

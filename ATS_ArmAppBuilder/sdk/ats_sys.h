@@ -11,11 +11,28 @@ extern "C" {
 // 按键码
 typedef enum {
     ATS_KEY_CODE_NONE = 0,               // 无按键
-    ATS_KEY_CODE_POWER = 1,              // 电源
-    ATS_KEY_CODE_VOLUME_INC = 2,         // 音量加
-    ATS_KEY_CODE_VOLUME_DEC = 4,         // 音量减
-    ATS_KEY_CODE_MENU = 8,               // 菜单
-    ATS_KEY_CODE_REPLAY = 16,            // 重播
+
+    ATS_KEY_CODE_POWER,                  // 电源
+    ATS_KEY_CODE_MENU,                   // 菜单
+    ATS_KEY_CODE_ENTER,                  // 确认
+    ATS_KEY_CODE_CANCEL,                 // 取消
+    ATS_KEY_CODE_CLEAR,                  // 清除
+    ATS_KEY_CODE_STAR,                   // *号键
+    ATS_KEY_CODE_POUND,                  // #号键
+    ATS_KEY_CODE_FUNC1,                  // 功能键1
+    ATS_KEY_CODE_FUNC2,                  // 功能键2
+    ATS_KEY_CODE_FUNC3,                  // 功能键3
+
+    ATS_KEY_CODE_NUM0,                   // 数字键0
+    ATS_KEY_CODE_NUM1,                   // 数字键1
+    ATS_KEY_CODE_NUM2,                   // 数字键2
+    ATS_KEY_CODE_NUM3,                   // 数字键3
+    ATS_KEY_CODE_NUM4,                   // 数字键4
+    ATS_KEY_CODE_NUM5,                   // 数字键5
+    ATS_KEY_CODE_NUM6,                   // 数字键6
+    ATS_KEY_CODE_NUM7,                   // 数字键7
+    ATS_KEY_CODE_NUM8,                   // 数字键8
+    ATS_KEY_CODE_NUM9,                   // 数字键9
 } ats_key_code_t;
 
 // 按键事件
