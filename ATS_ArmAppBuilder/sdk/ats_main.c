@@ -1,39 +1,18 @@
 #include <stddef.h>
+#include <string.h>
 
 #include "ats_sys.h"
 #include "ats_rpc.h"
+#include "ats_error.h"
 #include "FreeRTOS/FreeRTOS.h"
 #include "FreeRTOS/task.h"
-
-static void send_crash_event(uint32_t pc, uint32_t lr)
-{
-    uint8_t frame[ATS_RPC_HEADER_SIZE + 8U] = {0};
-
-    frame[0] = ATS_RPC_SOF0;
-    frame[1] = ATS_RPC_SOF1;
-    frame[2] = ATS_RPC_FRAME_TYPE_EVENT;
-    frame[3] = ATS_RPC_SERVICE_CORE;
-    frame[4] = ATS_RPC_CORE_CRASH;
-    frame[5] = 8U;
-    frame[6] = 0U;
-    frame[7] = (uint8_t)(pc & 0xFFU);
-    frame[8] = (uint8_t)((pc >> 8) & 0xFFU);
-    frame[9] = (uint8_t)((pc >> 16) & 0xFFU);
-    frame[10] = (uint8_t)((pc >> 24) & 0xFFU);
-    frame[11] = (uint8_t)(lr & 0xFFU);
-    frame[12] = (uint8_t)((lr >> 8) & 0xFFU);
-    frame[13] = (uint8_t)((lr >> 16) & 0xFFU);
-    frame[14] = (uint8_t)((lr >> 24) & 0xFFU);
-
-    (void)ats_rpc_transport_write(frame, ATS_RPC_HEADER_SIZE + 8);
-}
 
 __attribute__((noreturn)) void FaultHandler(uint32_t *sp)
 {
     uint32_t pc = sp[6];
     uint32_t lr = sp[5];
 
-    send_crash_event(pc, lr);
+    ats_rpc_event_for_crash(pc, lr);
 
     for (;;)
     {
@@ -65,12 +44,9 @@ void SystemInit(void)
 
 int __attribute__((weak)) main(void)
 {
-    if (xTaskCreate(ats_main_task,
-                    "Main",
-                    8192U / sizeof(StackType_t),
-                    NULL,
-                    tskIDLE_PRIORITY + 2U,
-                    NULL) != pdPASS)
+    ats_rpc_init();
+
+    if (xTaskCreate(ats_main_task, "Main", 8192U / sizeof(StackType_t), NULL, tskIDLE_PRIORITY + 2U, NULL) != pdPASS)
     {
         for (;;)
         {

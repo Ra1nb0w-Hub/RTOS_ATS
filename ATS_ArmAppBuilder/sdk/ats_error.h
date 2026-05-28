@@ -9,3 +9,4 @@
 #define ATS_RPC_EC_FRAME                (-13)
 #define ATS_RPC_EC_TOO_LARGE            (-14)
 #define ATS_RPC_EC_NO_MEMORY            (-15)
+#define ATS_RPC_EC_NOT_INIT             (-16)

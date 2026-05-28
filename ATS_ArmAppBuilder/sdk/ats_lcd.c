@@ -253,7 +253,7 @@ static void write_u16_le(uint8_t *buffer, unsigned short value)
 
 static int send_simple_lcd_event(uint8_t command, const uint8_t *payload, uint16_t payload_length)
 {
-    return ats_rpc_send_event(ATS_RPC_SERVICE_LCD,
+    return ats_rpc_event(ATS_RPC_SERVICE_LCD,
                               command,
                               payload,
                               payload_length);

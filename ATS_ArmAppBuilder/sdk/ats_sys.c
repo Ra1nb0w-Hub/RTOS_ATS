@@ -89,7 +89,7 @@ void ats_log_print(const char *string)
         return;
     }
 
-    ats_rpc_log_event(string);
+    (void)ats_rpc_event(ATS_RPC_SERVICE_CORE, ATS_RPC_CORE_WRITE_LOG, (const uint8_t *)string, (uint16_t)strlen(string));
 }
 
 void ats_log_printf(const char *format, ...)

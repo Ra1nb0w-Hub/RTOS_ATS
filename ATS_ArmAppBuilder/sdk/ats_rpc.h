@@ -26,7 +26,9 @@ typedef enum
     ATS_RPC_SERVICE_PRINTER = 3,
     ATS_RPC_SERVICE_FS = 4,
     ATS_RPC_SERVICE_NET = 5,
-    ATS_RPC_SERVICE_AUDIO = 6
+    ATS_RPC_SERVICE_AUDIO = 6,
+
+    ATS_RPC_MAX_SERVICES
 } ats_rpc_service_t;
 
 typedef enum
@@ -37,6 +39,7 @@ typedef enum
     ATS_RPC_CORE_GET_DATETIME = 4,
     ATS_RPC_CORE_GET_TIMESTAMP = 5,
     ATS_RPC_CORE_GET_SERIAL_NUMBER = 6,
+    ATS_RPC_CORE_GET_THREAD_INFO = 7
 } ats_rpc_core_command_t;
 
 typedef enum
@@ -77,24 +80,18 @@ typedef struct
     uint8_t *payload;
 } ats_rpc_frame_t;
 
-int ats_rpc_send_request(uint8_t service, uint8_t command,
-                         const uint8_t *payload, uint16_t payload_length);
-int ats_rpc_send_response(uint8_t service, uint8_t command,
-                          const uint8_t *payload, uint16_t payload_length);
-int ats_rpc_send_event(uint8_t service, uint8_t command,
-                       const uint8_t *payload, uint16_t payload_length);
+typedef int (*ats_rpc_handler_t)(const ats_rpc_frame_t *frame);
 
-int ats_rpc_request(uint8_t service, uint8_t command,
-                    const uint8_t *request_payload, uint16_t request_length,
-                    uint8_t *response_payload, uint16_t *response_length,
-                    uint32_t timeout_ms);
-int ats_rpc_receive(ats_rpc_frame_t *frame, uint32_t timeout_ms);
-void ats_rpc_frame_free(ats_rpc_frame_t *frame);
+int ats_rpc_event(uint8_t service, uint8_t command, const uint8_t *payload, uint16_t payload_length);
+void ats_rpc_event_for_crash(uint32_t pc, uint32_t lr);
+int ats_rpc_response(uint8_t service, uint8_t command, const uint8_t *payload, uint16_t payload_length);
+int ats_rpc_request(uint8_t service, uint8_t command, const uint8_t *request_payload, uint16_t request_length, uint8_t *response_payload, uint16_t *response_length, uint32_t timeout_ms);
 
-int ats_rpc_log_event(const char *message);
+void ats_rpc_init(void);
+void ats_rpc_register_service(uint8_t service, const ats_rpc_handler_t handler);
+void ats_rpc_dispatch(const ats_rpc_frame_t *frame);
 
-int ats_rpc_transport_write(const uint8_t *data, uint16_t length);
-int ats_rpc_transport_read(uint8_t *byte, uint32_t timeout_ms);
+int ats_rpc_core_handler(const ats_rpc_frame_t *frame);
 
 #ifdef __cplusplus
 }
