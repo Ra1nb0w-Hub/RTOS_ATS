@@ -1,578 +1,698 @@
 /**
  * @file ats_net.c
- * @brief ATS网络功能 - Windows平台实现
+ * @brief ATS网络功能 - RPC代理实现（Target端）
  *
- * 使用 Winsock2 实现 TCP/UDP socket 接口；
- * TLS连接使用 mbedtls 库（见 ats/lib/mbedtls）。
- * 蜂窝/WiFi 状态均通过变量保存（Windows无实际硬件）。
+ * 所有网络操作通过 RPC 请求转发到 Host 端执行。
+ * Host 端收到消息后调用其本地的 ats_net.c 实现。
  */
 
 #include "ats_net.h"
 
-#include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
-#include <stdbool.h>
+#include <stdlib.h>
 
-/* ---- Winsock ---- */
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#include <winsock2.h>
-#include <ws2tcpip.h>
+#include "ats_rpc.h"
+#include "ats_error.h"
 
-/* ---- mbedtls（TLS支持）----
- * 嵌入式目标：SDK 已提供 sdk/inc/600MTLS/mbedtls/include 作为 include 路径
- * Windows 平台：需将 ats/lib/mbedtls/include 加入编译器 include 路径
- */
-#include "mbedtls/net_sockets.h"
-#include "mbedtls/ssl.h"
-#include "mbedtls/entropy.h"
-#include "mbedtls/ctr_drbg.h"
-#include "mbedtls/error.h"
+#define ATS_NET_RPC_TIMEOUT_MS  5000U
 
-/* =========================================================
- * 内部状态变量
- * ========================================================= */
-
-static bool s_net_status = true;      /* 网络状态 */
-static bool s_net_status_set = false; /* 是否手动设置过状态 */
-static ats_net_mode_t s_net_mode = ATS_NET_MODE_CELLUALR;
-
-static bool s_wifi_module_status = true;
-static char s_wifi_cur_ssid[64] = {0};
-static int s_wifi_cur_signal = 0;
-static ats_net_wifi_ap_t *s_wifi_ap_list = NULL;
-static size_t s_wifi_ap_count = 0;
-
-static int s_cellular_mcc = 0;
-static int s_cellular_mnc = 0;
-static int s_cellular_lac = 0;
-static int s_cellular_cell_id = 0;
-static int s_cellular_signal = 0;
-static char s_cellular_imsi[32] = {0};
-static char s_cellular_imei[32] = {0};
-
-/* Winsock初始化标志 */
-static bool s_winsock_initialized = false;
-
-/* =========================================================
- * TLS 上下文池
- * ========================================================= */
-
-#define ATS_NET_MAX_SOCKETS 32
-
-typedef struct
+static void write_u32_le(uint8_t *buffer, uint32_t value)
 {
-    bool in_use;
-    bool is_tls;
-    /* 普通 socket */
-    SOCKET raw_sock;
-    /* TLS上下文 */
-    mbedtls_net_context tls_fd;
-    mbedtls_ssl_context ssl;
-    mbedtls_ssl_config ssl_conf;
-    mbedtls_entropy_context entropy;
-    mbedtls_ctr_drbg_context ctr_drbg;
-} ats_net_ctx_t;
-
-static ats_net_ctx_t s_net_ctx[ATS_NET_MAX_SOCKETS];
-static bool s_net_ctx_init = false;
-
-static void net_ctx_pool_init(void)
-{
-    if (!s_net_ctx_init)
-    {
-        memset(s_net_ctx, 0, sizeof(s_net_ctx));
-        for (int i = 0; i < ATS_NET_MAX_SOCKETS; i++)
-        {
-            s_net_ctx[i].raw_sock = INVALID_SOCKET;
-        }
-        s_net_ctx_init = true;
-    }
+    buffer[0] = (uint8_t)(value & 0xFFU);
+    buffer[1] = (uint8_t)((value >> 8) & 0xFFU);
+    buffer[2] = (uint8_t)((value >> 16) & 0xFFU);
+    buffer[3] = (uint8_t)((value >> 24) & 0xFFU);
 }
 
-static int alloc_net_ctx(void)
+static uint32_t read_u32_le(const uint8_t *buffer)
 {
-    for (int i = 0; i < ATS_NET_MAX_SOCKETS; i++)
-    {
-        if (!s_net_ctx[i].in_use)
-        {
-            s_net_ctx[i].in_use = false;
-            s_net_ctx[i].is_tls = false;
-            s_net_ctx[i].raw_sock = INVALID_SOCKET;
-            return i;
-        }
-    }
-    return -1;
+    return (uint32_t)buffer[0]
+         | ((uint32_t)buffer[1] << 8)
+         | ((uint32_t)buffer[2] << 16)
+         | ((uint32_t)buffer[3] << 24);
 }
 
-static ats_net_ctx_t *get_net_ctx(ats_sock_t sock)
+static void write_u16_le(uint8_t *buffer, uint16_t value)
 {
-    if (sock < 0 || sock >= ATS_NET_MAX_SOCKETS)
-        return NULL;
-    if (!s_net_ctx[sock].in_use)
-        return NULL;
-    return &s_net_ctx[sock];
+    buffer[0] = (uint8_t)(value & 0xFFU);
+    buffer[1] = (uint8_t)((value >> 8) & 0xFFU);
+}
+
+static uint16_t read_u16_le(const uint8_t *buffer)
+{
+    return (uint16_t)buffer[0] | ((uint16_t)buffer[1] << 8);
 }
 
 /* =========================================================
- * Winsock初始化
+ *  Socket 接口 (RPC 代理)
  * ========================================================= */
 
-static int ensure_winsock(void)
+int ats_sock_create(ats_sock_t *sock, ats_sock_family_t family, ats_sock_type_t type, ats_sock_protocol_t protocol)
 {
-    if (!s_winsock_initialized)
-    {
-        WSADATA wsa;
-        if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0)
-            return -1;
-        s_winsock_initialized = true;
-    }
+    if (!sock)
+        return -1;
+
+    uint8_t req[3];
+    req[0] = (uint8_t)family;
+    req[1] = (uint8_t)type;
+    req[2] = (uint8_t)protocol;
+
+    uint8_t resp[8];
+    uint16_t resp_len = sizeof(resp);
+    int rpc_ret = ats_rpc_request(ATS_RPC_SERVICE_NET, ATS_RPC_NET_CMD_SOCK_CREATE,
+                                  req, sizeof(req), resp, &resp_len, ATS_NET_RPC_TIMEOUT_MS);
+    if (rpc_ret != ATS_EC_OK || resp_len < 4)
+        return -1;
+
+    int32_t ret = (int32_t)read_u32_le(resp);
+    if (ret != 0)
+        return (int)ret;
+
+    if (resp_len < 8)
+        return -1;
+
+    *sock = (ats_sock_t)(int32_t)read_u32_le(&resp[4]);
     return 0;
-}
-
-/* =========================================================
- * Socket 接口
- * ========================================================= */
-
-int ats_sock_create(ats_sock_family_t family, ats_sock_type_t type, ats_sock_protocol_t protocol)
-{
-    if (ensure_winsock() != 0)
-        return -1;
-    net_ctx_pool_init();
-
-    int idx = alloc_net_ctx();
-    if (idx < 0)
-        return -1;
-
-    ats_net_ctx_t *ctx = &s_net_ctx[idx];
-
-    if (protocol == AST_SOCK_PROTOCOL_TLS)
-    {
-        /* TLS socket 延迟在 connect 时建立 */
-        ctx->in_use = true;
-        ctx->is_tls = true;
-        mbedtls_net_init(&ctx->tls_fd);
-        mbedtls_ssl_init(&ctx->ssl);
-        mbedtls_ssl_config_init(&ctx->ssl_conf);
-        mbedtls_entropy_init(&ctx->entropy);
-        mbedtls_ctr_drbg_init(&ctx->ctr_drbg);
-        return idx;
-    }
-
-    /* 普通 TCP/UDP socket */
-    int af = (family == ATS_SOCK_FAMILY_IPV6) ? AF_INET6 : AF_INET;
-    int stype = (type == AST_SOCK_TYPE_DGRAM) ? SOCK_DGRAM : SOCK_STREAM;
-    int proto = (type == AST_SOCK_TYPE_DGRAM) ? IPPROTO_UDP : IPPROTO_TCP;
-
-    SOCKET s = socket(af, stype, proto);
-    if (s == INVALID_SOCKET)
-        return -1;
-
-    ctx->in_use = true;
-    ctx->is_tls = false;
-    ctx->raw_sock = s;
-    return idx;
 }
 
 int ats_sock_connect(ats_sock_t sock, const char *host, uint16_t port, unsigned int timeout_ms)
 {
-    ats_net_ctx_t *ctx = get_net_ctx(sock);
-    if (!ctx || !host)
+    if (!host)
         return -1;
 
-    char port_str[8];
-    snprintf(port_str, sizeof(port_str), "%u", (unsigned)port);
-
-    /* ---------- TLS 连接 ---------- */
-    if (ctx->is_tls)
-    {
-        const char *pers = "ats_tls_client";
-        int ret;
-
-        ret = mbedtls_ctr_drbg_seed(&ctx->ctr_drbg, mbedtls_entropy_func,
-                                    &ctx->entropy,
-                                    (const unsigned char *)pers, strlen(pers));
-        if (ret != 0)
-            return -1;
-
-        ret = mbedtls_net_connect(&ctx->tls_fd, host, port_str, MBEDTLS_NET_PROTO_TCP);
-        if (ret != 0)
-            return -1;
-
-        ret = mbedtls_ssl_config_defaults(&ctx->ssl_conf,
-                                          MBEDTLS_SSL_IS_CLIENT,
-                                          MBEDTLS_SSL_TRANSPORT_STREAM,
-                                          MBEDTLS_SSL_PRESET_DEFAULT);
-        if (ret != 0)
-            return -1;
-
-        /* 不验证证书（嵌入式常见做法，如需验证请传入CA证书） */
-        mbedtls_ssl_conf_authmode(&ctx->ssl_conf, MBEDTLS_SSL_VERIFY_NONE);
-        mbedtls_ssl_conf_rng(&ctx->ssl_conf, mbedtls_ctr_drbg_random, &ctx->ctr_drbg);
-
-        ret = mbedtls_ssl_setup(&ctx->ssl, &ctx->ssl_conf);
-        if (ret != 0)
-            return -1;
-
-        ret = mbedtls_ssl_set_hostname(&ctx->ssl, host);
-        if (ret != 0)
-            return -1;
-
-        mbedtls_ssl_set_bio(&ctx->ssl, &ctx->tls_fd,
-                            mbedtls_net_send, mbedtls_net_recv,
-                            mbedtls_net_recv_timeout);
-
-        /* 设置超时 */
-        if (timeout_ms > 0)
-        {
-            mbedtls_ssl_conf_read_timeout(&ctx->ssl_conf, timeout_ms);
-        }
-
-        /* 握手 */
-        while ((ret = mbedtls_ssl_handshake(&ctx->ssl)) != 0)
-        {
-            if (ret != MBEDTLS_ERR_SSL_WANT_READ && ret != MBEDTLS_ERR_SSL_WANT_WRITE)
-            {
-                return -1;
-            }
-        }
-        return 0;
-    }
-
-    /* ---------- 普通 TCP/UDP 连接 ---------- */
-    struct addrinfo hints, *result = NULL;
-    memset(&hints, 0, sizeof(hints));
-    hints.ai_family = AF_UNSPEC;
-    hints.ai_socktype = SOCK_STREAM;
-
-    if (getaddrinfo(host, port_str, &hints, &result) != 0)
+    uint16_t host_len = (uint16_t)strlen(host);
+    if (host_len > 255U)
         return -1;
 
-    /* 设置连接超时（非阻塞 + select） */
-    u_long mode = 1;
-    ioctlsocket(ctx->raw_sock, FIONBIO, &mode);
+    uint16_t req_len = (uint16_t)(4 + 1 + host_len + 2 + 4);
+    uint8_t *req = (uint8_t *)malloc(req_len);
+    if (!req)
+        return -1;
 
-    connect(ctx->raw_sock, result->ai_addr, (int)result->ai_addrlen);
-    freeaddrinfo(result);
+    write_u32_le(req, (uint32_t)sock);
+    req[4] = (uint8_t)host_len;
+    memcpy(&req[5], host, host_len);
+    write_u16_le(&req[5 + host_len], port);
+    write_u32_le(&req[5 + host_len + 2], (uint32_t)timeout_ms);
 
-    fd_set wset;
-    FD_ZERO(&wset);
-    FD_SET(ctx->raw_sock, &wset);
+    uint8_t resp[4];
+    uint16_t resp_len = sizeof(resp);
+    int ret = ats_rpc_request(ATS_RPC_SERVICE_NET, ATS_RPC_NET_CMD_SOCK_CONNECT,
+                              req, req_len, resp, &resp_len, ATS_NET_RPC_TIMEOUT_MS);
+    free(req);
 
-    struct timeval tv;
-    tv.tv_sec = (long)(timeout_ms / 1000);
-    tv.tv_usec = (long)((timeout_ms % 1000) * 1000);
+    if (ret != ATS_EC_OK || resp_len < 4)
+        return -1;
 
-    int sel = select(0, NULL, &wset, NULL, timeout_ms > 0 ? &tv : NULL);
-
-    /* 恢复阻塞模式 */
-    mode = 0;
-    ioctlsocket(ctx->raw_sock, FIONBIO, &mode);
-
-    if (sel <= 0)
-        return -1; /* 超时或错误 */
-
-    /* 检查连接错误 */
-    int err = 0;
-    int len = sizeof(err);
-    getsockopt(ctx->raw_sock, SOL_SOCKET, SO_ERROR, (char *)&err, &len);
-    return (err == 0) ? 0 : -1;
+    return (int)read_u32_le(resp);
 }
 
 int ats_sock_send(ats_sock_t sock, const void *buf, unsigned int len)
 {
-    ats_net_ctx_t *ctx = get_net_ctx(sock);
-    if (!ctx || !buf)
+    if (!buf || len == 0U)
         return -1;
 
-    if (ctx->is_tls)
-    {
-        int ret = mbedtls_ssl_write(&ctx->ssl, (const unsigned char *)buf, len);
-        return (ret >= 0) ? ret : -2;
-    }
+    if (len > 0xFFFFU - 4U)
+        len = 0xFFFFU - 4U;
 
-    int ret = send(ctx->raw_sock, (const char *)buf, (int)len, 0);
-    return (ret == SOCKET_ERROR) ? -2 : ret;
+    uint16_t req_len = (uint16_t)(4 + len);
+    uint8_t *req = (uint8_t *)malloc(req_len);
+    if (!req)
+        return -1;
+
+    write_u32_le(req, (uint32_t)sock);
+    memcpy(&req[4], buf, len);
+
+    uint8_t resp[4];
+    uint16_t resp_len = sizeof(resp);
+    int ret = ats_rpc_request(ATS_RPC_SERVICE_NET, ATS_RPC_NET_CMD_SOCK_SEND,
+                              req, req_len, resp, &resp_len, ATS_NET_RPC_TIMEOUT_MS);
+    free(req);
+
+    if (ret != ATS_EC_OK || resp_len < 4)
+        return -1;
+
+    return (int)read_u32_le(resp);
 }
 
 int ats_sock_recv(ats_sock_t sock, void *buf, unsigned int len, unsigned int timeout_ms)
 {
-    ats_net_ctx_t *ctx = get_net_ctx(sock);
-    if (!ctx || !buf)
+    if (!buf || len == 0U)
         return -1;
 
-    if (ctx->is_tls)
+    if (len > 0xFFFFU - 4U)
+        len = 0xFFFFU - 4U;
+
+    uint8_t req[12];
+    write_u32_le(req, (uint32_t)sock);
+    write_u32_le(&req[4], len);
+    write_u32_le(&req[8], timeout_ms);
+
+    uint16_t resp_len = (uint16_t)(4 + len);
+    uint8_t *resp = (uint8_t *)malloc(resp_len);
+    if (!resp)
+        return -1;
+
+    int ret = ats_rpc_request(ATS_RPC_SERVICE_NET, ATS_RPC_NET_CMD_SOCK_RECV,
+                              req, sizeof(req), resp, &resp_len, ATS_NET_RPC_TIMEOUT_MS);
+    if (ret != ATS_EC_OK || resp_len < 4)
     {
-        mbedtls_ssl_conf_read_timeout(&ctx->ssl_conf, timeout_ms);
-        int ret = mbedtls_ssl_read(&ctx->ssl, (unsigned char *)buf, len);
-        if (ret == MBEDTLS_ERR_SSL_TIMEOUT || ret == MBEDTLS_ERR_SSL_WANT_READ)
-            return 0; /* 超时/无数据，不是错误，上层应继续重试 */
-        return (ret >= 0) ? ret : -2;
+        free(resp);
+        return -1;
     }
 
-    /* 设置接收超时 */
-    if (timeout_ms > 0)
+    int32_t bytes_recv = (int32_t)read_u32_le(resp);
+    if (bytes_recv > 0 && (uint16_t)(4 + bytes_recv) <= resp_len)
     {
-        DWORD tv = (DWORD)timeout_ms;
-        setsockopt(ctx->raw_sock, SOL_SOCKET, SO_RCVTIMEO, (const char *)&tv, sizeof(tv));
+        memcpy(buf, &resp[4], (size_t)bytes_recv);
+    }
+    else if (bytes_recv < 0)
+    {
+        free(resp);
+        return -1;
     }
 
-    int ret = recv(ctx->raw_sock, (char *)buf, (int)len, 0);
-    return (ret == SOCKET_ERROR) ? -2 : ret;
+    free(resp);
+    return (int)bytes_recv;
 }
 
 int ats_sock_close(ats_sock_t sock)
 {
-    ats_net_ctx_t *ctx = get_net_ctx(sock);
-    if (!ctx)
+    uint8_t req[4];
+    write_u32_le(req, (uint32_t)sock);
+
+    uint8_t resp[4];
+    uint16_t resp_len = sizeof(resp);
+    int ret = ats_rpc_request(ATS_RPC_SERVICE_NET, ATS_RPC_NET_CMD_SOCK_CLOSE,
+                              req, sizeof(req), resp, &resp_len, ATS_NET_RPC_TIMEOUT_MS);
+    if (ret != ATS_EC_OK || resp_len < 4)
         return -1;
 
-    if (ctx->is_tls)
-    {
-        mbedtls_ssl_close_notify(&ctx->ssl);
-        mbedtls_net_free(&ctx->tls_fd);
-        mbedtls_ssl_free(&ctx->ssl);
-        mbedtls_ssl_config_free(&ctx->ssl_conf);
-        mbedtls_ctr_drbg_free(&ctx->ctr_drbg);
-        mbedtls_entropy_free(&ctx->entropy);
-    }
-    else
-    {
-        closesocket(ctx->raw_sock);
-        ctx->raw_sock = INVALID_SOCKET;
-    }
-
-    memset(ctx, 0, sizeof(*ctx));
-    ctx->raw_sock = INVALID_SOCKET;
-    return 0;
+    return (int)read_u32_le(resp);
 }
 
 /* =========================================================
- * 网络状态管理
+ *  网络模式管理 (RPC 代理)
  * ========================================================= */
 
 int ats_net_set_mode(ats_net_mode_t mode)
 {
-    s_net_mode = mode;
-    return 0;
+    uint8_t req[1];
+    req[0] = (uint8_t)mode;
+
+    uint8_t resp[4];
+    uint16_t resp_len = sizeof(resp);
+    int ret = ats_rpc_request(ATS_RPC_SERVICE_NET, ATS_RPC_NET_CMD_SET_MODE,
+                              req, sizeof(req), resp, &resp_len, ATS_NET_RPC_TIMEOUT_MS);
+    if (ret != ATS_EC_OK || resp_len < 4)
+        return -1;
+
+    return (int)read_u32_le(resp);
 }
 
 ats_net_mode_t ats_net_get_mode(void)
 {
-    return s_net_mode;
+    uint8_t resp[4];
+    uint16_t resp_len = sizeof(resp);
+    int ret = ats_rpc_request(ATS_RPC_SERVICE_NET, ATS_RPC_NET_CMD_GET_MODE,
+                              NULL, 0, resp, &resp_len, ATS_NET_RPC_TIMEOUT_MS);
+    if (ret != ATS_EC_OK || resp_len < 4)
+        return ATS_NET_MODE_CELLUALR;
+
+    return (ats_net_mode_t)read_u32_le(resp);
 }
 
 int ats_net_set_status(bool status)
 {
-    s_net_status = status;
-    s_net_status_set = true;
-    return 0;
+    uint8_t req[1];
+    req[0] = status ? 1U : 0U;
+
+    uint8_t resp[4];
+    uint16_t resp_len = sizeof(resp);
+    int ret = ats_rpc_request(ATS_RPC_SERVICE_NET, ATS_RPC_NET_CMD_SET_STATUS,
+                              req, sizeof(req), resp, &resp_len, ATS_NET_RPC_TIMEOUT_MS);
+    if (ret != ATS_EC_OK || resp_len < 4)
+        return -1;
+
+    return (int)read_u32_le(resp);
 }
 
 bool ats_net_get_status(void)
 {
-    /* 优先返回手动设置的状态 */
-    if (s_net_status_set)
-    {
-        return s_net_status;
-    }
-
-    /* 通过 Windows API 检查真实网络状态 */
-    if (ensure_winsock() != 0)
+    uint8_t resp[1];
+    uint16_t resp_len = sizeof(resp);
+    int ret = ats_rpc_request(ATS_RPC_SERVICE_NET, ATS_RPC_NET_CMD_GET_STATUS,
+                              NULL, 0, resp, &resp_len, ATS_NET_RPC_TIMEOUT_MS);
+    if (ret != ATS_EC_OK || resp_len < 1)
         return false;
 
-    struct addrinfo hints, *res = NULL;
-    memset(&hints, 0, sizeof(hints));
-    hints.ai_family = AF_INET;
-    hints.ai_socktype = SOCK_STREAM;
-
-    /* 尝试解析公共DNS，判断网络是否可用 */
-    int ret = getaddrinfo("8.8.8.8", NULL, &hints, &res);
-    if (ret == 0 && res)
-    {
-        freeaddrinfo(res);
-        return true;
-    }
-    return false;
+    return resp[0] != 0U;
 }
 
 /* =========================================================
- * WiFi状态管理
+ *  WiFi状态管理 (RPC 代理)
  * ========================================================= */
 
 int ats_net_wifi_set_module_status(bool status)
 {
-    s_wifi_module_status = status;
-    return 0;
+    uint8_t req[1];
+    req[0] = status ? 1U : 0U;
+
+    uint8_t resp[4];
+    uint16_t resp_len = sizeof(resp);
+    int ret = ats_rpc_request(ATS_RPC_SERVICE_NET, ATS_RPC_NET_CMD_WIFI_SET_MODULE_STATUS,
+                              req, sizeof(req), resp, &resp_len, ATS_NET_RPC_TIMEOUT_MS);
+    if (ret != ATS_EC_OK || resp_len < 4)
+        return -1;
+
+    return (int)read_u32_le(resp);
 }
 
 bool ats_net_wifi_get_module_status(void)
 {
-    return s_wifi_module_status;
+    uint8_t resp[1];
+    uint16_t resp_len = sizeof(resp);
+    int ret = ats_rpc_request(ATS_RPC_SERVICE_NET, ATS_RPC_NET_CMD_WIFI_GET_MODULE_STATUS,
+                              NULL, 0, resp, &resp_len, ATS_NET_RPC_TIMEOUT_MS);
+    if (ret != ATS_EC_OK || resp_len < 1)
+        return false;
+
+    return resp[0] != 0U;
 }
 
 int ats_net_wifi_set_ssid(const char *ssid)
 {
     if (!ssid)
         return -1;
-    strncpy(s_wifi_cur_ssid, ssid, sizeof(s_wifi_cur_ssid) - 1);
-    s_wifi_cur_ssid[sizeof(s_wifi_cur_ssid) - 1] = '\0';
-    return 0;
+
+    uint16_t ssid_len = (uint16_t)strlen(ssid);
+    if (ssid_len > 63U)
+        ssid_len = 63U;
+
+    uint8_t req[65];
+    req[0] = (uint8_t)ssid_len;
+    memcpy(&req[1], ssid, ssid_len);
+
+    uint8_t resp[4];
+    uint16_t resp_len = sizeof(resp);
+    int ret = ats_rpc_request(ATS_RPC_SERVICE_NET, ATS_RPC_NET_CMD_WIFI_SET_SSID,
+                              req, (uint16_t)(1 + ssid_len),
+                              resp, &resp_len, ATS_NET_RPC_TIMEOUT_MS);
+    if (ret != ATS_EC_OK || resp_len < 4)
+        return -1;
+
+    return (int)read_u32_le(resp);
 }
 
 char *ats_net_wifi_get_ssid(void)
 {
-    return s_wifi_cur_ssid;
+    uint8_t resp[64];
+    uint16_t resp_len = sizeof(resp);
+    int ret = ats_rpc_request(ATS_RPC_SERVICE_NET, ATS_RPC_NET_CMD_WIFI_GET_SSID,
+                              NULL, 0, resp, &resp_len, ATS_NET_RPC_TIMEOUT_MS);
+    if (ret != ATS_EC_OK || resp_len == 0U)
+        return NULL;
+
+    if (resp_len > 63U)
+        resp_len = 63U;
+
+    char *ssid = (char *)malloc((size_t)resp_len + 1U);
+    if (!ssid)
+        return NULL;
+
+    memcpy(ssid, resp, resp_len);
+    ssid[resp_len] = '\0';
+    return ssid;
 }
 
 int ats_net_wifi_set_signal(int signal)
 {
-    s_wifi_cur_signal = signal;
-    return 0;
+    uint8_t req[4];
+    write_u32_le(req, (uint32_t)signal);
+
+    uint8_t resp[4];
+    uint16_t resp_len = sizeof(resp);
+    int ret = ats_rpc_request(ATS_RPC_SERVICE_NET, ATS_RPC_NET_CMD_WIFI_SET_SIGNAL,
+                              req, sizeof(req), resp, &resp_len, ATS_NET_RPC_TIMEOUT_MS);
+    if (ret != ATS_EC_OK || resp_len < 4)
+        return -1;
+
+    return (int)read_u32_le(resp);
 }
 
 int ats_net_wifi_get_signal(void)
 {
-    return s_wifi_cur_signal;
+    uint8_t resp[4];
+    uint16_t resp_len = sizeof(resp);
+    int ret = ats_rpc_request(ATS_RPC_SERVICE_NET, ATS_RPC_NET_CMD_WIFI_GET_SIGNAL,
+                              NULL, 0, resp, &resp_len, ATS_NET_RPC_TIMEOUT_MS);
+    if (ret != ATS_EC_OK || resp_len < 4)
+        return 0;
+
+    return (int)read_u32_le(resp);
 }
 
 int ats_net_wifi_set_ap_list(ats_net_wifi_ap_t *ap_list, unsigned int count)
 {
-    /* 释放旧列表 */
-    if (s_wifi_ap_list)
-    {
-        free(s_wifi_ap_list);
-        s_wifi_ap_list = NULL;
-        s_wifi_ap_count = 0;
-    }
-
-    if (!ap_list || count == 0)
-        return 0;
-
-    s_wifi_ap_list = (ats_net_wifi_ap_t *)malloc(sizeof(ats_net_wifi_ap_t) * count);
-    if (!s_wifi_ap_list)
+    if ((!ap_list && count > 0U) || count > 0xFFFFU)
         return -1;
 
-    memcpy(s_wifi_ap_list, ap_list, sizeof(ats_net_wifi_ap_t) * count);
-    s_wifi_ap_count = count;
-    return 0;
+#define ATS_NET_WIFI_AP_SERIAL_SIZE  92U
+    uint32_t req_len;
+    uint16_t count_u16;
+
+    if (count == 0U)
+    {
+        req_len = 2U;
+    }
+    else
+    {
+        req_len = 2U + (uint32_t)count * ATS_NET_WIFI_AP_SERIAL_SIZE;
+    }
+
+    if (req_len > 0xFFFFU)
+        return -1;
+
+    uint8_t *req = (uint8_t *)malloc((size_t)req_len);
+    if (!req)
+        return -1;
+
+    count_u16 = (uint16_t)count;
+    write_u16_le(req, count_u16);
+
+    for (uint16_t i = 0U; i < count_u16; i++)
+    {
+        uint16_t offset = (uint16_t)(2U + (uint16_t)i * ATS_NET_WIFI_AP_SERIAL_SIZE);
+        memcpy(&req[offset], ap_list[i].ssid, 64U);
+        write_u32_le(&req[offset + 64U], (uint32_t)ap_list[i].rssi);
+        memcpy(&req[offset + 68U], ap_list[i].mac, 24U);
+    }
+
+    uint8_t resp[4];
+    uint16_t resp_len_out = sizeof(resp);
+    int ret = ats_rpc_request(ATS_RPC_SERVICE_NET, ATS_RPC_NET_CMD_WIFI_SET_AP_LIST,
+                              req, (uint16_t)req_len, resp, &resp_len_out, ATS_NET_RPC_TIMEOUT_MS);
+    free(req);
+
+    if (ret != ATS_EC_OK || resp_len_out < 4)
+        return -1;
+
+    return (int)read_u32_le(resp);
 }
 
 int ats_net_wifi_get_ap_list(ats_net_wifi_ap_t **ap_list, unsigned int *count)
 {
     if (!ap_list || !count)
         return -1;
-    if (s_wifi_ap_count == 0 || !s_wifi_ap_list)
+
+    uint8_t *resp = (uint8_t *)malloc(0xFFFFU);
+    if (!resp)
+        return -1;
+
+    uint16_t resp_len = 0xFFFFU;
+    int ret = ats_rpc_request(ATS_RPC_SERVICE_NET, ATS_RPC_NET_CMD_WIFI_GET_AP_LIST,
+                              NULL, 0, resp, &resp_len, ATS_NET_RPC_TIMEOUT_MS);
+    if (ret != ATS_EC_OK || resp_len < 4U)
     {
+        free(resp);
         *ap_list = NULL;
-        *count = 0;
+        *count = 0U;
+        return -1;
+    }
+
+    int32_t result = (int32_t)read_u32_le(resp);
+    if (result != 0)
+    {
+        free(resp);
+        *ap_list = NULL;
+        *count = 0U;
+        return result;
+    }
+
+    if (resp_len < 6U)
+    {
+        free(resp);
+        *ap_list = NULL;
+        *count = 0U;
+        return -1;
+    }
+
+    uint16_t ap_count = read_u16_le(&resp[4]);
+    if (ap_count == 0U || (uint32_t)resp_len < (uint32_t)(6U + ap_count * ATS_NET_WIFI_AP_SERIAL_SIZE))
+    {
+        free(resp);
+        *ap_list = NULL;
+        *count = 0U;
         return 0;
     }
 
-    *ap_list = (ats_net_wifi_ap_t *)malloc(sizeof(ats_net_wifi_ap_t) * s_wifi_ap_count);
+    *ap_list = (ats_net_wifi_ap_t *)malloc(sizeof(ats_net_wifi_ap_t) * ap_count);
     if (!*ap_list)
+    {
+        free(resp);
         return -1;
+    }
 
-    memcpy(*ap_list, s_wifi_ap_list, sizeof(ats_net_wifi_ap_t) * s_wifi_ap_count);
-    *count = s_wifi_ap_count;
+    for (uint16_t i = 0U; i < ap_count; i++)
+    {
+        uint16_t offset = (uint16_t)(6U + i * ATS_NET_WIFI_AP_SERIAL_SIZE);
+        memcpy((*ap_list)[i].ssid, &resp[offset], 64U);
+        (*ap_list)[i].ssid[63] = '\0';
+        (*ap_list)[i].rssi = (int)read_u32_le(&resp[offset + 64U]);
+        memcpy((*ap_list)[i].mac, &resp[offset + 68U], 24U);
+        (*ap_list)[i].mac[23] = '\0';
+    }
+
+    *count = ap_count;
+    free(resp);
     return 0;
 }
 
 /* =========================================================
- * 蜂窝网络参数管理
+ *  蜂窝网络参数管理 (RPC 代理)
  * ========================================================= */
 
 int ats_net_cellular_set_mcc(int mcc)
 {
-    s_cellular_mcc = mcc;
-    return 0;
+    uint8_t req[4];
+    write_u32_le(req, (uint32_t)mcc);
+
+    uint8_t resp[4];
+    uint16_t resp_len = sizeof(resp);
+    int ret = ats_rpc_request(ATS_RPC_SERVICE_NET, ATS_RPC_NET_CMD_CELLULAR_SET_MCC,
+                              req, sizeof(req), resp, &resp_len, ATS_NET_RPC_TIMEOUT_MS);
+    if (ret != ATS_EC_OK || resp_len < 4)
+        return -1;
+
+    return (int)read_u32_le(resp);
 }
 
 int ats_net_cellular_get_mcc(void)
 {
-    return s_cellular_mcc;
+    uint8_t resp[4];
+    uint16_t resp_len = sizeof(resp);
+    int ret = ats_rpc_request(ATS_RPC_SERVICE_NET, ATS_RPC_NET_CMD_CELLULAR_GET_MCC,
+                              NULL, 0, resp, &resp_len, ATS_NET_RPC_TIMEOUT_MS);
+    if (ret != ATS_EC_OK || resp_len < 4)
+        return 0;
+
+    return (int)read_u32_le(resp);
 }
 
 int ats_net_cellular_set_mnc(int mnc)
 {
-    s_cellular_mnc = mnc;
-    return 0;
+    uint8_t req[4];
+    write_u32_le(req, (uint32_t)mnc);
+
+    uint8_t resp[4];
+    uint16_t resp_len = sizeof(resp);
+    int ret = ats_rpc_request(ATS_RPC_SERVICE_NET, ATS_RPC_NET_CMD_CELLULAR_SET_MNC,
+                              req, sizeof(req), resp, &resp_len, ATS_NET_RPC_TIMEOUT_MS);
+    if (ret != ATS_EC_OK || resp_len < 4)
+        return -1;
+
+    return (int)read_u32_le(resp);
 }
 
 int ats_net_cellular_get_mnc(void)
 {
-    return s_cellular_mnc;
+    uint8_t resp[4];
+    uint16_t resp_len = sizeof(resp);
+    int ret = ats_rpc_request(ATS_RPC_SERVICE_NET, ATS_RPC_NET_CMD_CELLULAR_GET_MNC,
+                              NULL, 0, resp, &resp_len, ATS_NET_RPC_TIMEOUT_MS);
+    if (ret != ATS_EC_OK || resp_len < 4)
+        return 0;
+
+    return (int)read_u32_le(resp);
 }
 
 int ats_net_cellular_set_lac(int lac)
 {
-    s_cellular_lac = lac;
-    return 0;
+    uint8_t req[4];
+    write_u32_le(req, (uint32_t)lac);
+
+    uint8_t resp[4];
+    uint16_t resp_len = sizeof(resp);
+    int ret = ats_rpc_request(ATS_RPC_SERVICE_NET, ATS_RPC_NET_CMD_CELLULAR_SET_LAC,
+                              req, sizeof(req), resp, &resp_len, ATS_NET_RPC_TIMEOUT_MS);
+    if (ret != ATS_EC_OK || resp_len < 4)
+        return -1;
+
+    return (int)read_u32_le(resp);
 }
 
 int ats_net_cellular_get_lac(void)
 {
-    return s_cellular_lac;
+    uint8_t resp[4];
+    uint16_t resp_len = sizeof(resp);
+    int ret = ats_rpc_request(ATS_RPC_SERVICE_NET, ATS_RPC_NET_CMD_CELLULAR_GET_LAC,
+                              NULL, 0, resp, &resp_len, ATS_NET_RPC_TIMEOUT_MS);
+    if (ret != ATS_EC_OK || resp_len < 4)
+        return 0;
+
+    return (int)read_u32_le(resp);
 }
 
 int ats_net_cellular_set_cell_id(int cell_id)
 {
-    s_cellular_cell_id = cell_id;
-    return 0;
+    uint8_t req[4];
+    write_u32_le(req, (uint32_t)cell_id);
+
+    uint8_t resp[4];
+    uint16_t resp_len = sizeof(resp);
+    int ret = ats_rpc_request(ATS_RPC_SERVICE_NET, ATS_RPC_NET_CMD_CELLULAR_SET_CELL_ID,
+                              req, sizeof(req), resp, &resp_len, ATS_NET_RPC_TIMEOUT_MS);
+    if (ret != ATS_EC_OK || resp_len < 4)
+        return -1;
+
+    return (int)read_u32_le(resp);
 }
 
 int ats_net_cellular_get_cell_id(void)
 {
-    return s_cellular_cell_id;
+    uint8_t resp[4];
+    uint16_t resp_len = sizeof(resp);
+    int ret = ats_rpc_request(ATS_RPC_SERVICE_NET, ATS_RPC_NET_CMD_CELLULAR_GET_CELL_ID,
+                              NULL, 0, resp, &resp_len, ATS_NET_RPC_TIMEOUT_MS);
+    if (ret != ATS_EC_OK || resp_len < 4)
+        return 0;
+
+    return (int)read_u32_le(resp);
 }
 
 int ats_net_cellular_set_signal(int signal)
 {
-    s_cellular_signal = signal;
-    return 0;
+    uint8_t req[4];
+    write_u32_le(req, (uint32_t)signal);
+
+    uint8_t resp[4];
+    uint16_t resp_len = sizeof(resp);
+    int ret = ats_rpc_request(ATS_RPC_SERVICE_NET, ATS_RPC_NET_CMD_CELLULAR_SET_SIGNAL,
+                              req, sizeof(req), resp, &resp_len, ATS_NET_RPC_TIMEOUT_MS);
+    if (ret != ATS_EC_OK || resp_len < 4)
+        return -1;
+
+    return (int)read_u32_le(resp);
 }
 
 int ats_net_cellular_get_signal(void)
 {
-    return s_cellular_signal;
+    uint8_t resp[4];
+    uint16_t resp_len = sizeof(resp);
+    int ret = ats_rpc_request(ATS_RPC_SERVICE_NET, ATS_RPC_NET_CMD_CELLULAR_GET_SIGNAL,
+                              NULL, 0, resp, &resp_len, ATS_NET_RPC_TIMEOUT_MS);
+    if (ret != ATS_EC_OK || resp_len < 4)
+        return 0;
+
+    return (int)read_u32_le(resp);
 }
 
 int ats_net_cellular_set_imsi(char *imsi)
 {
     if (!imsi)
         return -1;
-    strncpy(s_cellular_imsi, imsi, sizeof(s_cellular_imsi) - 1);
-    s_cellular_imsi[sizeof(s_cellular_imsi) - 1] = '\0';
-    return 0;
+
+    uint16_t imsi_len = (uint16_t)strlen(imsi);
+    if (imsi_len > 31U)
+        imsi_len = 31U;
+
+    uint8_t req[33];
+    req[0] = (uint8_t)imsi_len;
+    memcpy(&req[1], imsi, imsi_len);
+
+    uint8_t resp[4];
+    uint16_t resp_len = sizeof(resp);
+    int ret = ats_rpc_request(ATS_RPC_SERVICE_NET, ATS_RPC_NET_CMD_CELLULAR_SET_IMSI,
+                              req, (uint16_t)(1 + imsi_len),
+                              resp, &resp_len, ATS_NET_RPC_TIMEOUT_MS);
+    if (ret != ATS_EC_OK || resp_len < 4)
+        return -1;
+
+    return (int)read_u32_le(resp);
 }
 
 char *ats_net_cellular_get_imsi(void)
 {
-    return s_cellular_imsi;
+    uint8_t resp[32];
+    uint16_t resp_len = sizeof(resp);
+    int ret = ats_rpc_request(ATS_RPC_SERVICE_NET, ATS_RPC_NET_CMD_CELLULAR_GET_IMSI,
+                              NULL, 0, resp, &resp_len, ATS_NET_RPC_TIMEOUT_MS);
+    if (ret != ATS_EC_OK || resp_len == 0U)
+        return NULL;
+
+    if (resp_len > 31U)
+        resp_len = 31U;
+
+    char *imsi = (char *)malloc((size_t)resp_len + 1U);
+    if (!imsi)
+        return NULL;
+
+    memcpy(imsi, resp, resp_len);
+    imsi[resp_len] = '\0';
+    return imsi;
 }
 
 int ats_net_cellular_set_imei(char *imei)
 {
     if (!imei)
         return -1;
-    strncpy(s_cellular_imei, imei, sizeof(s_cellular_imei) - 1);
-    s_cellular_imei[sizeof(s_cellular_imei) - 1] = '\0';
-    return 0;
+
+    uint16_t imei_len = (uint16_t)strlen(imei);
+    if (imei_len > 31U)
+        imei_len = 31U;
+
+    uint8_t req[33];
+    req[0] = (uint8_t)imei_len;
+    memcpy(&req[1], imei, imei_len);
+
+    uint8_t resp[4];
+    uint16_t resp_len = sizeof(resp);
+    int ret = ats_rpc_request(ATS_RPC_SERVICE_NET, ATS_RPC_NET_CMD_CELLULAR_SET_IMEI,
+                              req, (uint16_t)(1 + imei_len),
+                              resp, &resp_len, ATS_NET_RPC_TIMEOUT_MS);
+    if (ret != ATS_EC_OK || resp_len < 4)
+        return -1;
+
+    return (int)read_u32_le(resp);
 }
 
 char *ats_net_cellular_get_imei(void)
 {
-    return s_cellular_imei;
-}
+    uint8_t resp[32];
+    uint16_t resp_len = sizeof(resp);
+    int ret = ats_rpc_request(ATS_RPC_SERVICE_NET, ATS_RPC_NET_CMD_CELLULAR_GET_IMEI,
+                              NULL, 0, resp, &resp_len, ATS_NET_RPC_TIMEOUT_MS);
+    if (ret != ATS_EC_OK || resp_len == 0U)
+        return NULL;
 
-int ats_net_get_connected_count(void)
-{
-    int count = 0;
-    for (int i = 0; i < ATS_NET_MAX_SOCKETS; i++) {
-        if (s_net_ctx[i].in_use)
-            count++;
-    }
-    return count;
+    if (resp_len > 31U)
+        resp_len = 31U;
+
+    char *imei = (char *)malloc((size_t)resp_len + 1U);
+    if (!imei)
+        return NULL;
+
+    memcpy(imei, resp, resp_len);
+    imei[resp_len] = '\0';
+    return imei;
 }

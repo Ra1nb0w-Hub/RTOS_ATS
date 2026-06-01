@@ -24,16 +24,13 @@ SOURCES += \
     core/emv_process_restrictions.c \
     core/emv_risk_management.c \
     core/emv_tlv.c \
-    core/emv_tools.c \
-    port/emv_reader_pcsc.c
+    core/emv_tools.c
 
 HEADERS += \
     include/emv_api.h \
     include/emv_types.h \
     include/emv_error.h \
     include/emv_tags.h \
-    core/emv_internal.h \
-    port/emv_reader_if.h \
-    port/emv_reader_pcsc.h
+    core/emv_internal.h
 
 win32: LIBS += -lwinscard

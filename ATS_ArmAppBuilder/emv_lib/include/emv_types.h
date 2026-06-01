@@ -81,6 +81,25 @@ typedef int (*EMVSelectAppCallback)(const EMVCandidateApp *pstApps, unsigned int
  */
 typedef int (*EMVInputPinCallback)(unsigned char bIsOnlinePin, unsigned int uiPinRetryTimes, unsigned char *pucOutPinBlock, unsigned int uiPinBlockLen);
 
+// 读卡器接口
+typedef struct EMVReaderInterface {
+    int (*open)(void);
+    int (*close)(void);
+    bool (*get_status)(void);
+    int (*poll_card)(EMVInterfaceType *card_interface, unsigned int timeout_ms);
+    int (*cancel_io)(void);
+
+    int (*icc_power_on)(unsigned char *atr, size_t *atr_len);
+    int (*icc_power_off)(void);
+    int (*icc_transceive_apdu)(const unsigned char *command, size_t command_len, unsigned char *response, size_t *response_len);
+
+    int (*picc_activate)(unsigned char *ats, size_t *ats_len);
+    int (*picc_deactivate)(void);
+    int (*picc_transceive_apdu)(const unsigned char *command, size_t command_len, unsigned char *response, size_t *response_len);
+
+    int (*get_last_hw_error)(void);
+} EMVReaderInterface;
+
 // 终端配置
 typedef struct EMVTerminalConfig {
     unsigned char country_code[2];                     // 国家代码

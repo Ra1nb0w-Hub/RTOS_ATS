@@ -41,6 +41,10 @@ private:
     void handleLcdFrame(const RpcProtocol::Frame &frame);
     void handlePrinterFrame(const RpcProtocol::Frame &frame);
     void handleCoreFrame(const RpcProtocol::Frame &frame);
+    void handleFsFrame(const RpcProtocol::Frame &frame);
+    void handleNetFrame(const RpcProtocol::Frame &frame);
+    void handleAudioFrame(const RpcProtocol::Frame &frame);
+    void handleReaderFrame(const RpcProtocol::Frame &frame);
 
     QTcpServer *m_server = nullptr;
     QTcpSocket *m_client = nullptr;

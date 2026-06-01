@@ -41,14 +41,15 @@ typedef struct {
 
 /**
  * @brief 创建socket
- * 
+ *
+ * @param sock 输出套接字句柄
  * @param family 地址族
  * @param type 类型
  * @param protocol 协议
- * 
- * @return 成功返回套接字
+ *
+ * @return 0:成功 <0:失败
  */
-int ats_sock_create(ats_sock_family_t family, ats_sock_type_t type, ats_sock_protocol_t protocol);
+int ats_sock_create(ats_sock_t *sock, ats_sock_family_t family, ats_sock_type_t type, ats_sock_protocol_t protocol);
 
 /**
  * @brief 连接socket
@@ -302,7 +303,7 @@ int ats_net_cellular_get_signal(void);
  * @return 0:成功 <0:失败
  * @note 保存到一个变量中
  */
-int ats_net_cellular_set_imsi(char *imsi);
+int ats_net_cellular_set_imsi(const char *imsi);
 
 /**
  * @brief 获取IMSI
@@ -320,7 +321,7 @@ char *ats_net_cellular_get_imsi(void);
  * @return 0:成功 <0:失败
  * @note 保存到一个变量中
  */
-int ats_net_cellular_set_imei(char *imei);
+int ats_net_cellular_set_imei(const char *imei);
 
 /**
  * @brief 获取IMEI

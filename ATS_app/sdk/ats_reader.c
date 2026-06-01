@@ -1,7 +1,11 @@
-#include "emv_reader_pcsc.h"
+#include "ats_reader.h"
+#include "ats_error.h"
+#include "emv_lib/include/emv_api.h"
+#include "emv_lib/include/emv_error.h"
 
-#include "../include/emv_error.h"
-#include "../include/emv_types.h"
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #include <stdbool.h>
 #include <string.h>
@@ -55,6 +59,7 @@ typedef struct EMVPcscContext {
     char reader_name[256];
 #endif
     unsigned int last_hw_error;
+    bool is_init;
     bool is_open;
     bool is_connected;
 } EMVPcscContext;
@@ -220,15 +225,28 @@ static const SCARD_IO_REQUEST *emv_pcsc_get_pci(unsigned long protocol)
 }
 
 /**
- * @brief 打开 PC/SC 上下文。
+ * @brief 初始化 PC/SC 上下文。
  *
- * @param user_data PC/SC 上下文。
+ * @param reader_if 读卡器接口。
  *
  * @return EMV_OK 表示成功，否则返回错误码。
  */
-static int emv_pcsc_open(void *user_data)
+int ats_reader_init(void)
 {
-    EMVPcscContext *ctx = (EMVPcscContext *)user_data;
+    memset(&g_pcsc_context, 0, sizeof(g_pcsc_context));
+    g_pcsc_context.is_init = true;
+
+    return EMV_OK;
+}
+
+/**
+ * @brief 打开 PC/SC 上下文。
+ *
+ * @return EMV_OK 表示成功，否则返回错误码。
+ */
+int ats_reader_open(void)
+{
+    EMVPcscContext *ctx = &g_pcsc_context;
 
     if (!ctx) {
         return EMV_ERR_INVALID_PARAM;
@@ -253,13 +271,11 @@ static int emv_pcsc_open(void *user_data)
 /**
  * @brief 关闭 PC/SC 上下文。
  *
- * @param user_data PC/SC 上下文。
- *
  * @return EMV_OK 表示成功，否则返回错误码。
  */
-static int emv_pcsc_close(void *user_data)
+int ats_reader_close(void)
 {
-    EMVPcscContext *ctx = (EMVPcscContext *)user_data;
+    EMVPcscContext *ctx = &g_pcsc_context;
 
     if (!ctx) {
         return EMV_ERR_INVALID_PARAM;
@@ -279,29 +295,17 @@ static int emv_pcsc_close(void *user_data)
 #endif
 }
 
-static bool emv_pcsc_get_status(void *user_data)
-{
-    EMVPcscContext *ctx = (EMVPcscContext *)user_data;
-
-    if (!ctx) {
-        return false;
-    }
-
-    return ctx->is_open && ctx->is_connected;
-}
-
 /**
  * @brief 轮询当前 PC/SC 读卡器状态。
  *
- * @param user_data PC/SC 上下文。
  * @param card_interface 输出的卡片接口。
  * @param timeout_ms 超时时间，单位毫秒。
  *
  * @return EMV_OK 表示成功，否则返回错误码。
  */
-static int emv_pcsc_poll_card(void *user_data, EMVInterfaceType *card_interface, unsigned int timeout_ms)
+int ats_reader_poll(EMVInterfaceType *card_interface, unsigned int timeout_ms)
 {
-    EMVPcscContext *ctx = (EMVPcscContext *)user_data;
+    EMVPcscContext *ctx = &g_pcsc_context;
 
     if (!ctx || !card_interface) {
         return EMV_ERR_INVALID_PARAM;
@@ -397,6 +401,7 @@ static int emv_pcsc_poll_card(void *user_data, EMVInterfaceType *card_interface,
     }
     return EMV_ERR_READER_NOT_FOUND_CARD;
 #else
+    (void)card_interface;
     (void)timeout_ms;
     (void)ctx;
     return EMV_ERR_NOT_SUPPORTED;
@@ -406,13 +411,11 @@ static int emv_pcsc_poll_card(void *user_data, EMVInterfaceType *card_interface,
 /**
  * @brief 取消 PC/SC 阻塞等待。
  *
- * @param user_data PC/SC 上下文。
- *
  * @return EMV_OK 表示成功，否则返回错误码。
  */
-static int emv_pcsc_cancel_io(void *user_data)
+int ats_reader_cancel(void)
 {
-    EMVPcscContext *ctx = (EMVPcscContext *)user_data;
+    EMVPcscContext *ctx = &g_pcsc_context;
 
     if (!ctx) {
         return EMV_ERR_INVALID_PARAM;
@@ -435,15 +438,14 @@ static int emv_pcsc_cancel_io(void *user_data)
 /**
  * @brief 连接卡片并返回 ATR。
  *
- * @param user_data PC/SC 上下文。
  * @param atr 输出 ATR 缓冲区。
  * @param atr_len 输入时为缓冲区大小，输出时为 ATR 长度。
  *
  * @return EMV_OK 表示成功，否则返回错误码。
  */
-static int emv_pcsc_icc_power_on(void *user_data, unsigned char *atr, size_t *atr_len)
+int ats_reader_icc_power_on(unsigned char *atr, size_t *atr_len)
 {
-    EMVPcscContext *ctx = (EMVPcscContext *)user_data;
+    EMVPcscContext *ctx = &g_pcsc_context;
 
     if (!ctx || !atr_len) {
         return EMV_ERR_INVALID_PARAM;
@@ -491,6 +493,8 @@ static int emv_pcsc_icc_power_on(void *user_data, unsigned char *atr, size_t *at
     return EMV_OK;
 #else
     (void)atr;
+    (void)atr_len;
+    (void)ctx;
     return EMV_ERR_NOT_SUPPORTED;
 #endif
 }
@@ -502,9 +506,9 @@ static int emv_pcsc_icc_power_on(void *user_data, unsigned char *atr, size_t *at
  *
  * @return EMV_OK 表示成功，否则返回错误码。
  */
-static int emv_pcsc_icc_power_off(void *user_data)
+int ats_reader_icc_power_off(void)
 {
-    EMVPcscContext *ctx = (EMVPcscContext *)user_data;
+    EMVPcscContext *ctx = &g_pcsc_context;
 
     if (!ctx) {
         return EMV_ERR_INVALID_PARAM;
@@ -517,7 +521,6 @@ static int emv_pcsc_icc_power_off(void *user_data)
 /**
  * @brief 通过 PC/SC 发送接触卡 APDU。
  *
- * @param user_data PC/SC 上下文。
  * @param command 输入 APDU。
  * @param command_len APDU 长度。
  * @param response 输出响应缓冲区。
@@ -525,13 +528,9 @@ static int emv_pcsc_icc_power_off(void *user_data)
  *
  * @return EMV_OK 表示成功，否则返回错误码。
  */
-static int emv_pcsc_icc_transceive_apdu(void *user_data,
-                                        const unsigned char *command,
-                                        size_t command_len,
-                                        unsigned char *response,
-                                        size_t *response_len)
+int ats_reader_icc_transceive_apdu(const unsigned char *command, size_t command_len, unsigned char *response, size_t *response_len)
 {
-    EMVPcscContext *ctx = (EMVPcscContext *)user_data;
+    EMVPcscContext *ctx = &g_pcsc_context;
 
     if (!ctx || !command || command_len == 0 || !response_len) {
         return EMV_ERR_INVALID_PARAM;
@@ -569,6 +568,8 @@ static int emv_pcsc_icc_transceive_apdu(void *user_data,
     (void)command;
     (void)command_len;
     (void)response;
+    (void)response_len;
+    (void)ctx;
     return EMV_ERR_NOT_SUPPORTED;
 #endif
 }
@@ -579,33 +580,31 @@ static int emv_pcsc_icc_transceive_apdu(void *user_data,
  * 当前骨架先复用接触式连接能力，通过 `SCardStatus` 返回的 ATR/ATS
  * 打通非接触链路，后续可按厂商读卡器特性进一步细化。
  *
- * @param user_data PC/SC 上下文。
  * @param ats 输出 ATS 缓冲区。
  * @param ats_len 输入时为缓冲区大小，输出时为 ATS 长度。
  *
  * @return EMV_OK 表示成功，否则返回错误码。
  */
-static int emv_pcsc_picc_activate(void *user_data, unsigned char *ats, size_t *ats_len)
+int ats_reader_picc_activate(unsigned char *ats, size_t *ats_len)
 {
-    return emv_pcsc_icc_power_on(user_data, ats, ats_len);
+    (void)ats;
+    (void)ats_len;
+    return EMV_ERR_NOT_SUPPORTED;
 }
 
 /**
  * @brief 去激活非接触卡。
  *
- * @param user_data PC/SC 上下文。
- *
  * @return EMV_OK 表示成功，否则返回错误码。
  */
-static int emv_pcsc_picc_deactivate(void *user_data)
+int ats_reader_picc_deactivate(void)
 {
-    return emv_pcsc_icc_power_off(user_data);
+    return EMV_ERR_NOT_SUPPORTED;
 }
 
 /**
  * @brief 通过 PC/SC 发送非接触卡 APDU。
  *
- * @param user_data PC/SC 上下文。
  * @param command 输入 APDU。
  * @param command_len APDU 长度。
  * @param response 输出响应缓冲区。
@@ -613,25 +612,23 @@ static int emv_pcsc_picc_deactivate(void *user_data)
  *
  * @return EMV_OK 表示成功，否则返回错误码。
  */
-static int emv_pcsc_picc_transceive_apdu(void *user_data,
-                                         const unsigned char *command,
-                                         size_t command_len,
-                                         unsigned char *response,
-                                         size_t *response_len)
+int ats_reader_picc_transceive_apdu(const unsigned char *command, size_t command_len, unsigned char *response, size_t *response_len)
 {
-    return emv_pcsc_icc_transceive_apdu(user_data, command, command_len, response, response_len);
+    (void)command;
+    (void)command_len;
+    (void)response;
+    (void)response_len;
+    return EMV_ERR_NOT_SUPPORTED;
 }
 
 /**
  * @brief 获取最近一次底层 PC/SC 错误码。
  *
- * @param user_data PC/SC 上下文。
- *
  * @return 最近一次底层错误码。
  */
-static int emv_pcsc_get_last_hw_error(void *user_data)
+int ats_reader_get_last_hw_error(void)
 {
-    EMVPcscContext *ctx = (EMVPcscContext *)user_data;
+    EMVPcscContext *ctx = &g_pcsc_context;
 
     if (!ctx) {
         return EMV_ERR_INVALID_PARAM;
@@ -639,34 +636,6 @@ static int emv_pcsc_get_last_hw_error(void *user_data)
     return (int)ctx->last_hw_error;
 }
 
-/**
- * @brief 使用 PC/SC 实现初始化读卡器接口。
- *
- * @param reader_if 待读写的读卡器接口对象。
- *
- * @return EMV_OK 表示成功，否则返回错误码。
- */
-int emv_reader_use_pcsc_driver(EMVReaderInterface *reader_if)
-{
-    if (!reader_if) {
-        return EMV_ERR_INVALID_PARAM;
-    }
-
-    memset(&g_pcsc_context, 0, sizeof(g_pcsc_context));
-    memset(reader_if, 0, sizeof(*reader_if));
-
-    reader_if->user_data = &g_pcsc_context;
-    reader_if->open = emv_pcsc_open;
-    reader_if->close = emv_pcsc_close;
-    reader_if->get_status = emv_pcsc_get_status;
-    reader_if->poll_card = emv_pcsc_poll_card;
-    reader_if->cancel_io = emv_pcsc_cancel_io;
-    reader_if->icc_power_on = emv_pcsc_icc_power_on;
-    reader_if->icc_power_off = emv_pcsc_icc_power_off;
-    reader_if->icc_transceive_apdu = emv_pcsc_icc_transceive_apdu;
-    reader_if->picc_activate = emv_pcsc_picc_activate;
-    reader_if->picc_deactivate = emv_pcsc_picc_deactivate;
-    reader_if->picc_transceive_apdu = emv_pcsc_picc_transceive_apdu;
-    reader_if->get_last_hw_error = emv_pcsc_get_last_hw_error;
-    return EMV_OK;
+#ifdef __cplusplus
 }
+#endif

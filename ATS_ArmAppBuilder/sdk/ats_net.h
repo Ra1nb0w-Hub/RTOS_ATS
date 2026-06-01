@@ -41,14 +41,15 @@ typedef struct {
 
 /**
  * @brief 创建socket
- * 
+ *
+ * @param sock 输出套接字句柄
  * @param family 地址族
  * @param type 类型
  * @param protocol 协议
- * 
- * @return 成功返回套接字
+ *
+ * @return 0:成功 <0:失败
  */
-int ats_sock_create(ats_sock_family_t family, ats_sock_type_t type, ats_sock_protocol_t protocol);
+int ats_sock_create(ats_sock_t *sock, ats_sock_family_t family, ats_sock_type_t type, ats_sock_protocol_t protocol);
 
 /**
  * @brief 连接socket
@@ -99,7 +100,6 @@ int ats_sock_close(ats_sock_t sock);
  * @param mode 需要切换的网络模式
  * 
  * @return 0:成功 <0:失败
- * @note 保存到一个变量中
  */
 int ats_net_set_mode(ats_net_mode_t mode);
 
@@ -107,7 +107,6 @@ int ats_net_set_mode(ats_net_mode_t mode);
  * @brief 获取网络模式(蜂窝/WiFi均使用此接口)
  * 
  * @return 网络模式
- * @note 从保存的变量中读取
  */
 ats_net_mode_t ats_net_get_mode(void);
 
@@ -117,7 +116,6 @@ ats_net_mode_t ats_net_get_mode(void);
  * @param status 状态 true:正常 false:异常
  * 
  * @return 0:成功 <0:失败
- * @note 保存到一个变量中
  */
 int ats_net_set_status(bool status);
 
@@ -125,7 +123,6 @@ int ats_net_set_status(bool status);
  * @brief 获取网络状态(蜂窝/WiFi均使用此接口)
  * 
  * @return true:正常 false:异常
- * @note 利用Windows平台相关API查询网络的状态，优先读取变量中保存的状态为准，其次读取真实的网络状态
  */
 bool ats_net_get_status(void);
 
@@ -135,7 +132,6 @@ bool ats_net_get_status(void);
  * @param status 状态 true:可用/存在 false:不可用/不存在
  * 
  * @return 0:成功 <0:失败
- * @note 保存到一个变量中
  */
 int ats_net_wifi_set_module_status(bool status);
 
@@ -143,7 +139,6 @@ int ats_net_wifi_set_module_status(bool status);
  * @brief 获取WiFi模块状态
  * 
  * @return true:可用/存在 false:不可用/不存在
- * @note 从保存的变量中读取
  */
 bool ats_net_wifi_get_module_status(void);
 
@@ -153,7 +148,6 @@ bool ats_net_wifi_get_module_status(void);
  * @param ssid SSID
  * 
  * @return 0:成功 <0:失败
- * @note 保存到一个变量中
  */
 int ats_net_wifi_set_ssid(const char *ssid);
 
@@ -161,7 +155,6 @@ int ats_net_wifi_set_ssid(const char *ssid);
  * @brief 获取当前连接的WiFi SSID
  * 
  * @return SSID
- * @note 从保存的变量中读取
  */
 char *ats_net_wifi_get_ssid(void);
 
@@ -171,7 +164,6 @@ char *ats_net_wifi_get_ssid(void);
  * @param signal 信号强度
  * 
  * @return 0:成功 <0:失败
- * @note 保存到一个变量中
  */
 int ats_net_wifi_set_signal(int signal);
 
@@ -179,7 +171,6 @@ int ats_net_wifi_set_signal(int signal);
  * @brief 获取当前连接的WiFi信号强度
  * 
  * @return 信号强度
- * @note 从保存的变量中读取
  */
 int ats_net_wifi_get_signal(void);
 
@@ -190,7 +181,6 @@ int ats_net_wifi_get_signal(void);
  * @param count AP数量
  * 
  * @return 0:成功 <0:失败
- * @note 保存到一个变量中
  */
 int ats_net_wifi_set_ap_list(ats_net_wifi_ap_t *ap_list, unsigned int count);
 
@@ -201,7 +191,6 @@ int ats_net_wifi_set_ap_list(ats_net_wifi_ap_t *ap_list, unsigned int count);
  * @param count AP数量
  * 
  * @return 0:成功 <0:失败
- * @note 从保存的变量中读取
  */
 int ats_net_wifi_get_ap_list(ats_net_wifi_ap_t **ap_list, unsigned int *count);
 
@@ -211,7 +200,6 @@ int ats_net_wifi_get_ap_list(ats_net_wifi_ap_t **ap_list, unsigned int *count);
  * @param mcc 移动国家代码
  * 
  * @return 0:成功 <0:失败
- * @note 保存到一个变量中
  */
 int ats_net_cellular_set_mcc(int mcc);
 
@@ -219,7 +207,6 @@ int ats_net_cellular_set_mcc(int mcc);
  * @brief 获取蜂窝网络MCC
  * 
  * @return 移动国家代码
- * @note 从保存的变量中读取
  */
 int ats_net_cellular_get_mcc(void);
 
@@ -229,7 +216,6 @@ int ats_net_cellular_get_mcc(void);
  * @param mnc 移动设备网络代码
  * 
  * @return 0:成功 <0:失败
- * @note 保存到一个变量中
  */
 int ats_net_cellular_set_mnc(int mnc);
 
@@ -237,7 +223,6 @@ int ats_net_cellular_set_mnc(int mnc);
  * @brief 获取蜂窝网络MNC
  * 
  * @return 移动设备网络代码
- * @note 从保存的变量中读取
  */
 int ats_net_cellular_get_mnc(void);
 
@@ -247,7 +232,6 @@ int ats_net_cellular_get_mnc(void);
  * @param lac 位置区域码
  * 
  * @return 0:成功 <0:失败
- * @note 保存到一个变量中
  */
 int ats_net_cellular_set_lac(int lac);
 
@@ -255,7 +239,6 @@ int ats_net_cellular_set_lac(int lac);
  * @brief 获取蜂窝网络LAC
  * 
  * @return 位置区域码
- * @note 从保存的变量中读取
  */
 int ats_net_cellular_get_lac(void);
 
@@ -265,7 +248,6 @@ int ats_net_cellular_get_lac(void);
  * @param cell_id 小区ID
  * 
  * @return 0:成功 <0:失败
- * @note 保存到一个变量中
  */
 int ats_net_cellular_set_cell_id(int cell_id);
 
@@ -273,7 +255,6 @@ int ats_net_cellular_set_cell_id(int cell_id);
  * @brief 获取蜂窝网络CELL ID
  * 
  * @return 小区ID
- * @note 从保存的变量中读取
  */
 int ats_net_cellular_get_cell_id(void);
 
@@ -282,7 +263,6 @@ int ats_net_cellular_get_cell_id(void);
  *
  * @param signal 信号值
  * @return 0:成功 <0:失败
- * @note 保存到一个变量中
  */
 int ats_net_cellular_set_signal(int signal);
 
@@ -290,7 +270,6 @@ int ats_net_cellular_set_signal(int signal);
  * @brief 获取蜂窝网络Signal
  *
  * @return 信号值
- * @note 从保存的变量中读取
  */
 int ats_net_cellular_get_signal(void);
 
@@ -300,7 +279,6 @@ int ats_net_cellular_get_signal(void);
  * @param imsi IMSI
  * 
  * @return 0:成功 <0:失败
- * @note 保存到一个变量中
  */
 int ats_net_cellular_set_imsi(char *imsi);
 
@@ -308,7 +286,6 @@ int ats_net_cellular_set_imsi(char *imsi);
  * @brief 获取IMSI
  * 
  * @return IMSI
- * @note 从保存的变量中读取
  */
 char *ats_net_cellular_get_imsi(void);
 
@@ -318,7 +295,6 @@ char *ats_net_cellular_get_imsi(void);
  * @param imei IMEI
  * 
  * @return 0:成功 <0:失败
- * @note 保存到一个变量中
  */
 int ats_net_cellular_set_imei(char *imei);
 
@@ -326,16 +302,8 @@ int ats_net_cellular_set_imei(char *imei);
  * @brief 获取IMEI
  * 
  * @return IMEI
- * @note 从保存的变量中读取
  */
 char *ats_net_cellular_get_imei(void);
-
-/**
- * @brief 获取当前已建立连接的 socket 数量
- *
- * @return 已 in_use 的 socket 上下文数量
- */
-int ats_net_get_connected_count(void);
 
 #ifdef __cplusplus
 }

@@ -444,4 +444,32 @@ bool decodePrinterPrintBitmapEvent(const Frame &frame, PrinterPrintBitmapEvent *
         }
     }
 }
+
+bool isFsRequest(const Frame &frame, quint8 expectedCommand)
+{
+    return frame.frameType == kFrameTypeRequest &&
+           frame.service == kServiceFs &&
+           frame.command == expectedCommand;
+}
+
+bool isNetRequest(const Frame &frame, quint8 expectedCommand)
+{
+    return frame.frameType == kFrameTypeRequest &&
+           frame.service == kServiceNet &&
+           frame.command == expectedCommand;
+}
+
+bool isAudioRequest(const Frame &frame, quint8 expectedCommand)
+{
+    return frame.frameType == kFrameTypeRequest &&
+           frame.service == kServiceAudio &&
+           frame.command == expectedCommand;
+}
+
+bool isReaderRequest(const Frame &frame, quint8 expectedCommand)
+{
+    return frame.frameType == kFrameTypeRequest &&
+           frame.service == kServiceReader &&
+           frame.command == expectedCommand;
+}
 }

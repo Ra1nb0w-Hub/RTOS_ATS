@@ -12,6 +12,7 @@ extern "C" {
 // 设置终端配置
 int emv_terminal_set_config(const EMVTerminalConfig *config);
 int emv_terminal_get_config(EMVTerminalConfig *config);
+int emv_terminal_set_reader(EMVReaderInterface *reader);
 
 // 清空应用参数
 void emv_app_parameter_clear(void);

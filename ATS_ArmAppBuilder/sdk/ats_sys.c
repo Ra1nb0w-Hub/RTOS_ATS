@@ -364,7 +364,7 @@ static int datetime_decode(ats_datetime_t *dt, const uint8_t *buf, uint16_t len)
 
 int ats_datetime_get(ats_datetime_t *datetime)
 {
-    uint8_t resp_buf[7];
+    uint8_t resp_buf[4U + 7U];
     uint16_t resp_len = sizeof(resp_buf);
     int status;
 
@@ -383,13 +383,34 @@ int ats_datetime_get(ats_datetime_t *datetime)
         return status;
     }
 
-    return datetime_decode(datetime, resp_buf, resp_len);
+    if (resp_len < 4U)
+    {
+        return ATS_EC_INVALID_PARAM;
+    }
+
+    {
+        int32_t ret = (int32_t)((uint32_t)resp_buf[0]
+                     | ((uint32_t)resp_buf[1] << 8)
+                     | ((uint32_t)resp_buf[2] << 16)
+                     | ((uint32_t)resp_buf[3] << 24));
+        if (ret != 0)
+        {
+            return ret;
+        }
+    }
+
+    if (resp_len < (4U + 7U))
+    {
+        return ATS_EC_INVALID_PARAM;
+    }
+
+    return datetime_decode(datetime, &resp_buf[4], (uint16_t)(resp_len - 4U));
 }
 
 int ats_datetime_set(ats_datetime_t *datetime)
 {
     uint8_t req_buf[7];
-    uint8_t resp_buf[1];
+    uint8_t resp_buf[4];
     uint16_t resp_len = sizeof(resp_buf);
 
     if (datetime == NULL)
@@ -399,11 +420,25 @@ int ats_datetime_set(ats_datetime_t *datetime)
 
     (void)datetime_encode(datetime, req_buf);
 
-    return ats_rpc_request(ATS_RPC_SERVICE_CORE,
-                           ATS_RPC_CORE_SET_DATETIME,
-                           req_buf, sizeof(req_buf),
-                           resp_buf, &resp_len,
-                           2000U);
+    const int status = ats_rpc_request(ATS_RPC_SERVICE_CORE,
+                                       ATS_RPC_CORE_SET_DATETIME,
+                                       req_buf, sizeof(req_buf),
+                                       resp_buf, &resp_len,
+                                       2000U);
+    if (status != ATS_EC_OK)
+    {
+        return status;
+    }
+
+    if (resp_len < 4U)
+    {
+        return ATS_EC_INVALID_PARAM;
+    }
+
+    return (int32_t)((uint32_t)resp_buf[0]
+                   | ((uint32_t)resp_buf[1] << 8)
+                   | ((uint32_t)resp_buf[2] << 16)
+                   | ((uint32_t)resp_buf[3] << 24));
 }
 
 unsigned long ats_timestamp_get(void)

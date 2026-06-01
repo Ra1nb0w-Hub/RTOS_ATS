@@ -13,7 +13,6 @@ extern "C" {
  * @param[in] uiVolume 音量值, 0-100
  * 
  * @return 0:成功 <0:失败
- * @note 调用Windows平台的API调整系统音量
  */
 int ats_audio_set_volume(size_t uiVolume);
 
@@ -23,7 +22,6 @@ int ats_audio_set_volume(size_t uiVolume);
  * @param[out] puiVolume 音量值, 0-100
  * 
  * @return 0:成功 <0:失败
- * @note 调用Windows平台的API获取系统音量
  */
 int ats_audio_get_volume(size_t *puiVolume);
 
@@ -52,18 +50,11 @@ int ats_audio_init(void);
 
 /**
  * @brief 关闭音频播放子系统
- * 
+ *
  * 停止后台播放线程，等待当前正在播放的音频播完后退出。
  * 应在程序退出时调用。
  */
 void ats_audio_shutdown(void);
-
-/**
- * @brief 获取音频队列当前长度
- *
- * @return 当前队列中的音频文件数量
- */
-int ats_audio_get_queue_count(void);
 
 /**
  * @brief 查询是否有音频正在播放

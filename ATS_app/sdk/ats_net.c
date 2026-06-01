@@ -136,8 +136,11 @@ static int ensure_winsock(void)
  * Socket 接口
  * ========================================================= */
 
-int ats_sock_create(ats_sock_family_t family, ats_sock_type_t type, ats_sock_protocol_t protocol)
+int ats_sock_create(ats_sock_t *sock, ats_sock_family_t family, ats_sock_type_t type, ats_sock_protocol_t protocol)
 {
+    if (!sock)
+        return -1;
+
     if (ensure_winsock() != 0)
         return -1;
     net_ctx_pool_init();
@@ -158,7 +161,8 @@ int ats_sock_create(ats_sock_family_t family, ats_sock_type_t type, ats_sock_pro
         mbedtls_ssl_config_init(&ctx->ssl_conf);
         mbedtls_entropy_init(&ctx->entropy);
         mbedtls_ctr_drbg_init(&ctx->ctr_drbg);
-        return idx;
+        *sock = (ats_sock_t)idx;
+        return 0;
     }
 
     /* 普通 TCP/UDP socket */
@@ -173,7 +177,8 @@ int ats_sock_create(ats_sock_family_t family, ats_sock_type_t type, ats_sock_pro
     ctx->in_use = true;
     ctx->is_tls = false;
     ctx->raw_sock = s;
-    return idx;
+    *sock = (ats_sock_t)idx;
+    return 0;
 }
 
 int ats_sock_connect(ats_sock_t sock, const char *host, uint16_t port, unsigned int timeout_ms)
@@ -539,7 +544,7 @@ int ats_net_cellular_get_signal(void)
     return s_cellular_signal;
 }
 
-int ats_net_cellular_set_imsi(char *imsi)
+int ats_net_cellular_set_imsi(const char *imsi)
 {
     if (!imsi)
         return -1;
@@ -553,7 +558,7 @@ char *ats_net_cellular_get_imsi(void)
     return s_cellular_imsi;
 }
 
-int ats_net_cellular_set_imei(char *imei)
+int ats_net_cellular_set_imei(const char *imei)
 {
     if (!imei)
         return -1;

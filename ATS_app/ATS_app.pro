@@ -57,6 +57,7 @@ SOURCES += \
     sdk/ats_audio.c \
     sdk/ats_fs.c \
     sdk/ats_sys.cpp \
+    sdk/ats_reader.c \
     app/main.c
 
 HEADERS += \
@@ -84,6 +85,7 @@ HEADERS += \
     sdk/ats_audio.h \
     sdk/ats_fs.h \
     sdk/ats_sys.h \
+    sdk/ats_reader.h
 
 FORMS += \
     ui/MainWindow.ui \

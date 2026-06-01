@@ -36,12 +36,7 @@ file(GLOB APP_SOURCE_FILES CONFIGURE_DEPENDS
 file(GLOB SDK_C_SOURCE_FILES CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/sdk/*.c"
     "${CMAKE_CURRENT_SOURCE_DIR}/sdk/FreeRTOS/*.c"
-)
-
-list(REMOVE_ITEM SDK_C_SOURCE_FILES
-    "${CMAKE_CURRENT_SOURCE_DIR}/sdk/ats_audio.c"
-    "${CMAKE_CURRENT_SOURCE_DIR}/sdk/ats_fs.c"
-    "${CMAKE_CURRENT_SOURCE_DIR}/sdk/ats_net.c"
+    "${CMAKE_CURRENT_SOURCE_DIR}/emv_lib/core/*.c"
 )
 
 set(SDK_SOURCE_FILES
@@ -60,9 +55,12 @@ set_target_properties(ats_app PROPERTIES
 )
 
 target_include_directories(ats_app PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}"
     "${CMAKE_CURRENT_SOURCE_DIR}/source"
     "${CMAKE_CURRENT_SOURCE_DIR}/sdk"
     "${CMAKE_CURRENT_SOURCE_DIR}/sdk/FreeRTOS"
+    "${CMAKE_CURRENT_SOURCE_DIR}/emv_lib/core"
+    "${CMAKE_CURRENT_SOURCE_DIR}/emv_lib/include"
 )
 
 target_compile_definitions(ats_app PRIVATE

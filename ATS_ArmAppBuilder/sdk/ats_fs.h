@@ -112,17 +112,6 @@ int ats_fs_remove(const char *pathName);
  */
 int ats_fs_exist(const char *pathName);
 
-/**
- * @brief 将相对路径解析为完整路径
- *
- * 例如 "exdata/welc.mp3" -> "%LOCALAPPDATA%/ATS/ats_data/exdata/welc.mp3"
- * 调用者需 free() 返回的字符串。
- *
- * @param pathName 相对路径
- * @return 完整路径字符串（需调用者 free），失败返回 NULL
- */
-char *ats_fs_fullpath(const char *pathName);
-
 #ifdef __cplusplus
 }
 #endif
