@@ -46,7 +46,7 @@ int __attribute__((weak)) main(void)
 {
     ats_rpc_init();
 
-    if (xTaskCreate(ats_main_task, "Main", 8192U / sizeof(StackType_t), NULL, tskIDLE_PRIORITY + 2U, NULL) != pdPASS)
+    if (xTaskCreate(ats_main_task, "Main", 32768U / sizeof(StackType_t), NULL, tskIDLE_PRIORITY + 2U, NULL) != pdPASS)
     {
         for (;;)
         {

@@ -48,6 +48,7 @@ SOURCES += \
     core/QemuController.cpp \
     core/RpcProtocol.cpp \
     core/RpcSerialServer.cpp \
+    core/RpcFrameProcessor.cpp \
     core/Addr2LineResolver.cpp \
     lua/LuaEngine.cpp \
     log/LogManager.cpp \
@@ -74,6 +75,7 @@ HEADERS += \
     core/QemuController.h \
     core/RpcProtocol.h \
     core/RpcSerialServer.h \
+    core/RpcFrameProcessor.h \
     core/Addr2LineResolver.h \
     log/LogManager.h \
     lua/LuaEngine.h \

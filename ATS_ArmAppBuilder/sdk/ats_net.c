@@ -14,7 +14,8 @@
 #include "ats_rpc.h"
 #include "ats_error.h"
 
-#define ATS_NET_RPC_TIMEOUT_MS  5000U
+#define ATS_NET_RPC_TIMEOUT_MS       5000U
+#define ATS_NET_RPC_OVERHEAD_MS      500U
 
 static void write_u32_le(uint8_t *buffer, uint32_t value)
 {
@@ -97,8 +98,15 @@ int ats_sock_connect(ats_sock_t sock, const char *host, uint16_t port, unsigned 
 
     uint8_t resp[4];
     uint16_t resp_len = sizeof(resp);
+
+    uint32_t rpc_timeout = timeout_ms;
+    if (rpc_timeout > 0xFFFFFFFFU - ATS_NET_RPC_OVERHEAD_MS)
+        rpc_timeout = 0xFFFFFFFFU;
+    else
+        rpc_timeout += ATS_NET_RPC_OVERHEAD_MS;
+
     int ret = ats_rpc_request(ATS_RPC_SERVICE_NET, ATS_RPC_NET_CMD_SOCK_CONNECT,
-                              req, req_len, resp, &resp_len, ATS_NET_RPC_TIMEOUT_MS);
+                              req, req_len, resp, &resp_len, rpc_timeout);
     free(req);
 
     if (ret != ATS_EC_OK || resp_len < 4)
@@ -153,8 +161,14 @@ int ats_sock_recv(ats_sock_t sock, void *buf, unsigned int len, unsigned int tim
     if (!resp)
         return -1;
 
+    uint32_t rpc_timeout = timeout_ms;
+    if (rpc_timeout > 0xFFFFFFFFU - ATS_NET_RPC_OVERHEAD_MS)
+        rpc_timeout = 0xFFFFFFFFU;
+    else
+        rpc_timeout += ATS_NET_RPC_OVERHEAD_MS;
+
     int ret = ats_rpc_request(ATS_RPC_SERVICE_NET, ATS_RPC_NET_CMD_SOCK_RECV,
-                              req, sizeof(req), resp, &resp_len, ATS_NET_RPC_TIMEOUT_MS);
+                              req, sizeof(req), resp, &resp_len, rpc_timeout);
     if (ret != ATS_EC_OK || resp_len < 4)
     {
         free(resp);

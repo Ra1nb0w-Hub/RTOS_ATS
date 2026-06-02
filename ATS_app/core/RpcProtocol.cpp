@@ -162,6 +162,14 @@ bool decodeLogEvent(const Frame &frame, LogEvent *event)
     return !event->message.isEmpty();
 }
 
+static quint32 readLe32(const char *data)
+{
+    return static_cast<quint8>(data[0])
+         | (static_cast<quint32>(static_cast<quint8>(data[1])) << 8)
+         | (static_cast<quint32>(static_cast<quint8>(data[2])) << 16)
+         | (static_cast<quint32>(static_cast<quint8>(data[3])) << 24);
+}
+
 bool decodeCrashEvent(const Frame &frame, CrashEvent *event)
 {
     if (!event ||
@@ -175,16 +183,19 @@ bool decodeCrashEvent(const Frame &frame, CrashEvent *event)
     }
 
     const char *data = frame.payload.constData();
-    const int count = size / 4;
-    event->addresses.clear();
-    event->addresses.reserve(count);
 
-    for (int i = 0; i < count; ++i) {
-        quint32 addr = static_cast<quint8>(data[i * 4])
-                     | (static_cast<quint32>(static_cast<quint8>(data[i * 4 + 1])) << 8)
-                     | (static_cast<quint32>(static_cast<quint8>(data[i * 4 + 2])) << 16)
-                     | (static_cast<quint32>(static_cast<quint8>(data[i * 4 + 3])) << 24);
-        event->addresses.append(addr);
+    if (size >= 4) {
+        event->pc = readLe32(data);
+    }
+    if (size >= 8) {
+        event->lr = readLe32(data + 4);
+    }
+
+    if (size >= 24) {
+        event->cfsr  = readLe32(data + 8);
+        event->hfsr  = readLe32(data + 12);
+        event->bfar  = readLe32(data + 16);
+        event->mmfar = readLe32(data + 20);
     }
 
     return true;
@@ -283,29 +294,29 @@ bool decodeLcdBitmap1Event(const Frame &frame, LcdBitmap1Event *event)
         return false;
     }
 
+    if (frame.payload.size() >= 14) {
+        const quint8 encoding = static_cast<quint8>(data[13]);
+        const QByteArray encodedBitmap = frame.payload.mid(14);
+        switch (encoding) {
+        case kBitmapEncodingRaw:
+            if (encodedBitmap.size() != expectedBitmapBytes) {
+                return false;
+            }
+            event->bitmapData = encodedBitmap;
+            return true;
+        case kBitmapEncodingRle8:
+            return decodeRleBytes(encodedBitmap, expectedBitmapBytes, &event->bitmapData);
+        default:
+            return false;
+        }
+    }
+
     if (frame.payload.size() == 13 + expectedBitmapBytes) {
         event->bitmapData = frame.payload.mid(13);
         return true;
     }
 
-    if (frame.payload.size() < 14) {
-        return false;
-    }
-
-    const quint8 encoding = static_cast<quint8>(data[13]);
-    const QByteArray encodedBitmap = frame.payload.mid(14);
-    switch (encoding) {
-    case kBitmapEncodingRaw:
-        if (encodedBitmap.size() != expectedBitmapBytes) {
-            return false;
-        }
-        event->bitmapData = encodedBitmap;
-        return true;
-    case kBitmapEncodingRle8:
-        return decodeRleBytes(encodedBitmap, expectedBitmapBytes, &event->bitmapData);
-    default:
-        return false;
-    }
+    return false;
 }
 
 bool decodeLcdBitmap16Event(const Frame &frame, LcdBitmap16Event *event)
@@ -330,21 +341,10 @@ bool decodeLcdBitmap16Event(const Frame &frame, LcdBitmap16Event *event)
         return false;
     }
 
-    if (frame.payload.size() == 8 + expectedBitmapBytes) {
-        event->pixels.resize(expectedPixelCount);
-        for (int index = 0; index < expectedPixelCount; ++index) {
-            event->pixels[index] = readLe16(data + 8 + index * 2);
-        }
-        return true;
-    }
-
-    if (frame.payload.size() < 9) {
-        return false;
-    }
-
-    const quint8 encoding = static_cast<quint8>(data[8]);
-    const QByteArray encodedPixels = frame.payload.mid(9);
-    switch (encoding) {
+    if (frame.payload.size() >= 9) {
+        const quint8 encoding = static_cast<quint8>(data[8]);
+        const QByteArray encodedPixels = frame.payload.mid(9);
+        switch (encoding) {
     case kBitmapEncodingRaw:
         if (encodedPixels.size() != expectedBitmapBytes) {
             return false;
@@ -360,6 +360,17 @@ bool decodeLcdBitmap16Event(const Frame &frame, LcdBitmap16Event *event)
     default:
         return false;
     }
+    }
+
+    if (frame.payload.size() == 8 + expectedBitmapBytes) {
+        event->pixels.resize(expectedPixelCount);
+        for (int index = 0; index < expectedPixelCount; ++index) {
+            event->pixels[index] = readLe16(data + 8 + index * 2);
+        }
+        return true;
+    }
+
+    return false;
 }
 
 bool isLcdDeinitEvent(const Frame &frame)

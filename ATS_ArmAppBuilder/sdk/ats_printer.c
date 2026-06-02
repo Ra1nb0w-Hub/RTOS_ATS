@@ -32,7 +32,12 @@ static bool s_paper_status = true;
  */
 static uint16_t ats_printer_rle8_worst_case_size(uint16_t source_length)
 {
-    return (uint16_t)(source_length + ((source_length + 127U) / 128U));
+    /* Worst case: alternating rep2-lit1 pattern.
+     * Each rep2 block: 2 bytes (1 ctl + 1 data) for 2 source bytes (zero overhead).
+     * Each lit1 block: 2 bytes (1 ctl + 1 data) for 1 source byte (+1 overhead).
+     * Max overhead = (source_length + 2) / 3  =>  worst = source_length + (source_length + 2) / 3
+     */
+    return (uint16_t)(source_length + (source_length + 2U) / 3U);
 }
 
 /**

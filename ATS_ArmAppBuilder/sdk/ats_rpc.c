@@ -68,16 +68,16 @@ static void uart_write(uint32_t base, uint32_t offset, uint32_t value)
 
 static void uart_init_tx(void)
 {
-    uart_write(ATS_UART_BASE, ATS_UART_CTRL_OFFSET, 0U);
+    uint32_t ctrl = uart_read(ATS_UART_BASE, ATS_UART_CTRL_OFFSET);
     uart_write(ATS_UART_BASE, ATS_UART_BAUDDIV_OFFSET, ATS_UART_BAUD_DIVISOR);
-    uart_write(ATS_UART_BASE, ATS_UART_CTRL_OFFSET, ATS_UART_CTRL_TX_EN);
+    uart_write(ATS_UART_BASE, ATS_UART_CTRL_OFFSET, ctrl | ATS_UART_CTRL_TX_EN);
 }
 
 static void uart_init_rx(void)
 {
-    uart_write(ATS_UART_BASE, ATS_UART_CTRL_OFFSET, 0U);
+    uint32_t ctrl = uart_read(ATS_UART_BASE, ATS_UART_CTRL_OFFSET);
     uart_write(ATS_UART_BASE, ATS_UART_BAUDDIV_OFFSET, ATS_UART_BAUD_DIVISOR);
-    uart_write(ATS_UART_BASE, ATS_UART_CTRL_OFFSET, ATS_UART_CTRL_TX_EN | ATS_UART_CTRL_RX_EN);
+    uart_write(ATS_UART_BASE, ATS_UART_CTRL_OFFSET, ctrl | ATS_UART_CTRL_TX_EN | ATS_UART_CTRL_RX_EN);
 }
 
 static bool uart_try_read_byte(uint8_t *byte)
@@ -370,7 +370,7 @@ int ats_rpc_event(uint8_t service, uint8_t command, const uint8_t *payload, uint
 
 void ats_rpc_event_for_crash(uint32_t pc, uint32_t lr)
 {
-    uint8_t frame[15U] = {0};
+    uint8_t frame[31U] = {0};
 
     if (!s_rpc_initialized)
     {
@@ -382,20 +382,58 @@ void ats_rpc_event_for_crash(uint32_t pc, uint32_t lr)
     frame[2] = ATS_RPC_FRAME_TYPE_EVENT;
     frame[3] = ATS_RPC_SERVICE_CORE;
     frame[4] = ATS_RPC_CORE_CRASH;
-    frame[5] = 8U;
+    frame[5] = 24U;
     frame[6] = 0U;
 
-    frame[7] = (uint8_t)(pc & 0xFFU);
-    frame[8] = (uint8_t)((pc >> 8) & 0xFFU);
-    frame[9] = (uint8_t)((pc >> 16) & 0xFFU);
+    /* PC [7..10] */
+    frame[7]  = (uint8_t)(pc & 0xFFU);
+    frame[8]  = (uint8_t)((pc >> 8) & 0xFFU);
+    frame[9]  = (uint8_t)((pc >> 16) & 0xFFU);
     frame[10] = (uint8_t)((pc >> 24) & 0xFFU);
 
+    /* LR [11..14] */
     frame[11] = (uint8_t)(lr & 0xFFU);
     frame[12] = (uint8_t)((lr >> 8) & 0xFFU);
     frame[13] = (uint8_t)((lr >> 16) & 0xFFU);
     frame[14] = (uint8_t)((lr >> 24) & 0xFFU);
 
-    (void)ats_rpc_transport_write(frame, 15U);
+    /* CFSR [15..18] — 0xE000ED28 */
+    {
+        const uint32_t cfsr = *(const volatile uint32_t *)0xE000ED28U;
+        frame[15] = (uint8_t)(cfsr & 0xFFU);         /* MMFSR */
+        frame[16] = (uint8_t)((cfsr >> 8) & 0xFFU);   /* BFSR */
+        frame[17] = (uint8_t)((cfsr >> 16) & 0xFFU);  /* UFSR */
+        frame[18] = 0U;
+    }
+
+    /* HFSR [19..22] — 0xE000ED2C */
+    {
+        const uint32_t hfsr = *(const volatile uint32_t *)0xE000ED2CU;
+        frame[19] = (uint8_t)(hfsr & 0xFFU);
+        frame[20] = (uint8_t)((hfsr >> 8) & 0xFFU);
+        frame[21] = (uint8_t)((hfsr >> 16) & 0xFFU);
+        frame[22] = (uint8_t)((hfsr >> 24) & 0xFFU);
+    }
+
+    /* BFAR [23..26] — 0xE000ED38 */
+    {
+        const uint32_t bfar = *(const volatile uint32_t *)0xE000ED38U;
+        frame[23] = (uint8_t)(bfar & 0xFFU);
+        frame[24] = (uint8_t)((bfar >> 8) & 0xFFU);
+        frame[25] = (uint8_t)((bfar >> 16) & 0xFFU);
+        frame[26] = (uint8_t)((bfar >> 24) & 0xFFU);
+    }
+
+    /* MMFAR [27..30] — 0xE000ED34 */
+    {
+        const uint32_t mmfar = *(const volatile uint32_t *)0xE000ED34U;
+        frame[27] = (uint8_t)(mmfar & 0xFFU);
+        frame[28] = (uint8_t)((mmfar >> 8) & 0xFFU);
+        frame[29] = (uint8_t)((mmfar >> 16) & 0xFFU);
+        frame[30] = (uint8_t)((mmfar >> 24) & 0xFFU);
+    }
+
+    (void)ats_rpc_transport_write(frame, sizeof(frame));
 }
 
 int ats_rpc_response(uint8_t service, uint8_t command, const uint8_t *payload, uint16_t payload_length)

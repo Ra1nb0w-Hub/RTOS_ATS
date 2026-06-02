@@ -6,8 +6,8 @@
 
 #include <string.h>
 
-#define ATS_READER_RPC_TIMEOUT_MS        5000U
-#define ATS_READER_RPC_POLL_BUF_MS       5000U
+#define ATS_READER_RPC_TIMEOUT_MS        500U
+#define ATS_READER_RPC_POLL_BUF_MS       500U
 #define ATS_READER_RESP_HEADER_SIZE      4U
 #define ATS_READER_MAX_ATR               64U
 #define ATS_READER_MAX_ATS               64U

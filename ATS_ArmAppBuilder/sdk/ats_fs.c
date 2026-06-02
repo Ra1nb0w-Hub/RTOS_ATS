@@ -14,7 +14,7 @@
 #include "ats_rpc.h"
 #include "ats_error.h"
 
-#define ATS_FS_RPC_TIMEOUT_MS  5000U
+#define ATS_FS_RPC_TIMEOUT_MS  500U
 
 static void write_u32_le(uint8_t *buffer, uint32_t value)
 {

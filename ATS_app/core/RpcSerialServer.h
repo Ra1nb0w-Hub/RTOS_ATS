@@ -4,6 +4,8 @@
 
 class QTcpServer;
 class QTcpSocket;
+class QThread;
+class RpcFrameProcessor;
 namespace RpcProtocol
 {
 struct Frame;
@@ -32,22 +34,17 @@ private slots:
     void onNewConnection();
     void onSocketReadyRead();
     void onSocketDisconnected();
+    void onProcessorWriteResponse(QByteArray frame);
 
 private:
     void closeClient();
     void processIncomingData();
-    void handleLogFrame(const RpcProtocol::Frame &frame);
-    void handleRpcFrame(const RpcProtocol::Frame &frame);
-    void handleLcdFrame(const RpcProtocol::Frame &frame);
-    void handlePrinterFrame(const RpcProtocol::Frame &frame);
-    void handleCoreFrame(const RpcProtocol::Frame &frame);
-    void handleFsFrame(const RpcProtocol::Frame &frame);
-    void handleNetFrame(const RpcProtocol::Frame &frame);
-    void handleAudioFrame(const RpcProtocol::Frame &frame);
-    void handleReaderFrame(const RpcProtocol::Frame &frame);
 
     QTcpServer *m_server = nullptr;
     QTcpSocket *m_client = nullptr;
     QByteArray m_rxBuffer;
     QString m_elfPath;
+
+    QThread *m_workerThread = nullptr;
+    RpcFrameProcessor *m_processor = nullptr;
 };

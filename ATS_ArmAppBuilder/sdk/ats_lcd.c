@@ -34,7 +34,12 @@ static void write_u16_le(uint8_t *buffer, unsigned short value);
  */
 static uint16_t rle8_worst_case_size(uint16_t source_length)
 {
-    return (uint16_t)(source_length + ((source_length + 127U) / 128U));
+    /* Worst case: alternating rep2-lit1 pattern.
+     * Each rep2 block: 2 bytes (1 ctl + 1 data) for 2 source bytes (zero overhead).
+     * Each lit1 block: 2 bytes (1 ctl + 1 data) for 1 source byte (+1 overhead).
+     * Max overhead = (source_length + 2) / 3  =>  worst = source_length + (source_length + 2) / 3
+     */
+    return (uint16_t)(source_length + (source_length + 2U) / 3U);
 }
 
 /**
@@ -46,7 +51,10 @@ static uint16_t rle8_worst_case_size(uint16_t source_length)
  */
 static uint16_t rle16_worst_case_size(uint16_t pixel_count)
 {
-    return (uint16_t)((pixel_count * 2U) + ((pixel_count + 127U) / 128U));
+    /* Same worst-case block distribution as RLE8, but each pixel is 2 bytes.
+     * Raw bytes = pixel_count * 2, max overhead same: (pixel_count + 2) / 3
+     */
+    return (uint16_t)((pixel_count * 2U) + (pixel_count + 2U) / 3U);
 }
 
 /**
