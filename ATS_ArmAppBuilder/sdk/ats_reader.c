@@ -6,12 +6,14 @@
 
 #include <string.h>
 
-#define ATS_READER_RPC_TIMEOUT_MS        500U
-#define ATS_READER_RPC_POLL_BUF_MS       500U
-#define ATS_READER_RESP_HEADER_SIZE      4U
-#define ATS_READER_MAX_ATR               64U
-#define ATS_READER_MAX_ATS               64U
-#define ATS_READER_MAX_APDU              4096U
+#define ATS_READER_RPC_TIMEOUT_MS           500U
+#define ATS_READER_RPC_POWER_ON_MS          2000U
+#define ATS_READER_RPC_PICC_ACTIVATE_MS     2000U
+#define ATS_READER_RPC_TRANSFER_TIMEOUT_MS  5000U
+#define ATS_READER_RESP_HEADER_SIZE         4U
+#define ATS_READER_MAX_ATR                  64U
+#define ATS_READER_MAX_ATS                  64U
+#define ATS_READER_MAX_APDU                 4096U
 
 static void write_u32_le(uint8_t *buffer, uint32_t value)
 {
@@ -67,7 +69,6 @@ int ats_reader_poll(EMVInterfaceType *card_interface, unsigned int timeout_ms)
     uint8_t req[4];
     uint8_t resp[ATS_READER_RESP_HEADER_SIZE + 1];
     uint16_t resp_len = sizeof(resp);
-    uint32_t rpc_timeout;
     int ret;
 
     if (!card_interface)
@@ -75,15 +76,14 @@ int ats_reader_poll(EMVInterfaceType *card_interface, unsigned int timeout_ms)
 
     *card_interface = EMV_INTERFACE_NONE;
 
-    write_u32_le(req, (uint32_t)timeout_ms);
+    if (timeout_ms < 1000)
+        timeout_ms = 1000;
 
-    rpc_timeout = (uint32_t)timeout_ms + ATS_READER_RPC_POLL_BUF_MS;
-    if (rpc_timeout < ATS_READER_RPC_POLL_BUF_MS)
-        rpc_timeout = 0xFFFFFFFFUL;
+    write_u32_le(req, (uint32_t)timeout_ms);
 
     ret = ats_rpc_request(ATS_RPC_SERVICE_READER, ATS_RPC_READER_CMD_POLL,
                           req, sizeof(req),
-                          resp, &resp_len, rpc_timeout);
+                          resp, &resp_len, timeout_ms);
     if (ret != ATS_EC_OK || resp_len < ATS_READER_RESP_HEADER_SIZE)
         return -1;
 
@@ -114,7 +114,7 @@ int ats_reader_icc_power_on(unsigned char *atr, size_t *atr_len)
 
     ret = ats_rpc_request(ATS_RPC_SERVICE_READER, ATS_RPC_READER_CMD_ICC_POWER_ON,
                           NULL, 0,
-                          resp, &resp_len, ATS_READER_RPC_TIMEOUT_MS);
+                          resp, &resp_len, ATS_READER_RPC_POWER_ON_MS);
     if (ret != ATS_EC_OK || resp_len < ATS_READER_RESP_HEADER_SIZE)
         return -1;
 
@@ -169,7 +169,7 @@ int ats_reader_icc_transceive_apdu(const unsigned char *command, size_t command_
 
     ret = ats_rpc_request(ATS_RPC_SERVICE_READER, ATS_RPC_READER_CMD_ICC_TRANSCEIVE_APDU,
                           req, req_len,
-                          resp, &resp_len, ATS_READER_RPC_TIMEOUT_MS);
+                          resp, &resp_len, ATS_READER_RPC_TRANSFER_TIMEOUT_MS);
     vPortFree(req);
 
     if (ret != ATS_EC_OK || resp_len < ATS_READER_RESP_HEADER_SIZE)
@@ -208,7 +208,7 @@ int ats_reader_picc_activate(unsigned char *ats, size_t *ats_len)
 
     ret = ats_rpc_request(ATS_RPC_SERVICE_READER, ATS_RPC_READER_CMD_PICC_ACTIVATE,
                           NULL, 0,
-                          resp, &resp_len, ATS_READER_RPC_TIMEOUT_MS);
+                          resp, &resp_len, ATS_READER_RPC_PICC_ACTIVATE_MS);
     if (ret != ATS_EC_OK || resp_len < ATS_READER_RESP_HEADER_SIZE)
         return -1;
 
@@ -263,7 +263,7 @@ int ats_reader_picc_transceive_apdu(const unsigned char *command, size_t command
 
     ret = ats_rpc_request(ATS_RPC_SERVICE_READER, ATS_RPC_READER_CMD_PICC_TRANSCEIVE_APDU,
                           req, req_len,
-                          resp, &resp_len, ATS_READER_RPC_TIMEOUT_MS);
+                          resp, &resp_len, ATS_READER_RPC_TRANSFER_TIMEOUT_MS);
     vPortFree(req);
 
     if (ret != ATS_EC_OK || resp_len < ATS_READER_RESP_HEADER_SIZE)
