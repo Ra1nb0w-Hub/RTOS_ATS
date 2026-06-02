@@ -462,19 +462,32 @@ int ats_reader_icc_power_on(unsigned char *atr, size_t *atr_len)
         return EMV_ERR_BAD_STATE;
     }
 
-    emv_pcsc_disconnect_card(ctx);
+    if (ctx->is_connected) {
+        rc = SCardReconnect(ctx->card_handle,
+                            SCARD_SHARE_SHARED,
+                            SCARD_PROTOCOL_T0 | SCARD_PROTOCOL_T1,
+                            SCARD_RESET_CARD,
+                            &ctx->active_protocol);
 
-    rc = SCardConnectA(ctx->context,
-                       ctx->reader_name,
-                       SCARD_SHARE_SHARED,
-                       SCARD_PROTOCOL_T0 | SCARD_PROTOCOL_T1,
-                       &ctx->card_handle,
-                       &ctx->active_protocol);
-    if (rc != SCARD_S_SUCCESS) {
-        ctx->last_hw_error = (unsigned int)rc;
-        return EMV_ERR_READER_IO;
+        if (rc != SCARD_S_SUCCESS) {
+            emv_pcsc_disconnect_card(ctx);
+        }
     }
-    ctx->is_connected = true;
+
+    if (!ctx->is_connected) {
+        rc = SCardConnectA(ctx->context,
+                           ctx->reader_name,
+                           SCARD_SHARE_SHARED,
+                           SCARD_PROTOCOL_T0 | SCARD_PROTOCOL_T1,
+                           &ctx->card_handle,
+                           &ctx->active_protocol);
+
+        if (rc != SCARD_S_SUCCESS) {
+            ctx->last_hw_error = (unsigned int)rc;
+            return EMV_ERR_READER_IO;
+        }
+        ctx->is_connected = true;
+    }
 
     stable_ret = emv_pcsc_confirm_power_on_stable(ctx, &protocol, atr_buf, &atr_buf_len);
     if (stable_ret != EMV_OK) {

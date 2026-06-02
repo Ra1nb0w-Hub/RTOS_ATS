@@ -1032,12 +1032,18 @@ void RpcFrameProcessor::handleReaderFrame(const RpcProtocol::Frame &frame)
     }
 
     if (RpcProtocol::isReaderRequest(frame, RpcProtocol::kReaderCommandIccTransceiveApdu)) {
-        if (p.size() < 4)
+        if (p.size() < 4) {
+            sendResponse(RpcProtocol::kServiceReader, RpcProtocol::kReaderCommandIccTransceiveApdu,
+                         buildInt32Response(-1));
             return;
+        }
 
         const quint32 cmdLen = static_cast<quint32>(readInt32Le(data, 0));
-        if (p.size() < static_cast<int>(4 + cmdLen))
+        if (cmdLen > 4096U || cmdLen > static_cast<quint32>(p.size() - 4)) {
+            sendResponse(RpcProtocol::kServiceReader, RpcProtocol::kReaderCommandIccTransceiveApdu,
+                         buildInt32Response(-2));
             return;
+        }
 
         const QByteArray cmd = p.mid(4, static_cast<int>(cmdLen));
         unsigned char response[4096];
@@ -1097,12 +1103,18 @@ void RpcFrameProcessor::handleReaderFrame(const RpcProtocol::Frame &frame)
     }
 
     if (RpcProtocol::isReaderRequest(frame, RpcProtocol::kReaderCommandPiccTransceiveApdu)) {
-        if (p.size() < 4)
+        if (p.size() < 4) {
+            sendResponse(RpcProtocol::kServiceReader, RpcProtocol::kReaderCommandPiccTransceiveApdu,
+                         buildInt32Response(-1));
             return;
+        }
 
         const quint32 cmdLen = static_cast<quint32>(readInt32Le(data, 0));
-        if (p.size() < static_cast<int>(4 + cmdLen))
+        if (cmdLen > 4096U || cmdLen > static_cast<quint32>(p.size() - 4)) {
+            sendResponse(RpcProtocol::kServiceReader, RpcProtocol::kReaderCommandPiccTransceiveApdu,
+                         buildInt32Response(-2));
             return;
+        }
 
         const QByteArray cmd = p.mid(4, static_cast<int>(cmdLen));
         unsigned char response[4096];
