@@ -69,6 +69,15 @@ typedef void *ats_mutex_handle_t;
 // 信号量句柄
 typedef void *ats_semaphore_handle_t;
 
+// 定时器类型
+typedef enum {
+    ATS_TIMER_ONE_SHOT = 0,   // 单次
+    ATS_TIMER_PERIODIC,       // 周期
+} ats_timer_type_t;
+
+// 定时器句柄
+typedef void *ats_timer_handle_t;
+
 /**
  * @brief ATS入口函数
  */
@@ -278,6 +287,67 @@ char* ats_serial_number_get(void);
  * @return 0:成功 <0:失败
  */
 int ats_serial_number_set(char *serial_number);
+
+/**
+ * @brief 创建定时器
+ * 
+ * @param handle 输出定时器句柄
+ * @param name 定时器名称
+ * @param type 定时器类型
+ * @param period_ms 周期, 单位:毫秒
+ * @param callback 回调函数
+ * @param args 回调参数
+ * 
+ * @return 0:成功 <0:失败
+ */
+int ats_timer_create(ats_timer_handle_t *handle, const char *name,
+                     ats_timer_type_t type, unsigned int period_ms,
+                     void (*callback)(void *args), void *args);
+
+/**
+ * @brief 启动定时器
+ * 
+ * @param handle 定时器句柄
+ * 
+ * @return 0:成功 <0:失败
+ */
+int ats_timer_start(ats_timer_handle_t *handle);
+
+/**
+ * @brief 停止定时器
+ * 
+ * @param handle 定时器句柄
+ * 
+ * @return 0:成功 <0:失败
+ */
+int ats_timer_stop(ats_timer_handle_t *handle);
+
+/**
+ * @brief 重置定时器(重新计时)
+ * 
+ * @param handle 定时器句柄
+ * 
+ * @return 0:成功 <0:失败
+ */
+int ats_timer_reset(ats_timer_handle_t *handle);
+
+/**
+ * @brief 删除定时器
+ * 
+ * @param handle 定时器句柄
+ * 
+ * @return 0:成功 <0:失败
+ */
+int ats_timer_delete(ats_timer_handle_t *handle);
+
+/**
+ * @brief 判断定时器是否正在运行
+ * 
+ * @param handle 定时器句柄
+ * 
+ * @return 1:运行中, 0:未运行
+ */
+int ats_timer_is_running(ats_timer_handle_t *handle);
 
 #ifdef __cplusplus
 }

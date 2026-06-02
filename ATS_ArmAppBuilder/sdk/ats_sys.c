@@ -7,6 +7,7 @@
 #include "FreeRTOS/queue.h"
 #include "FreeRTOS/semphr.h"
 #include "FreeRTOS/task.h"
+#include "FreeRTOS/timers.h"
 
 #include <stdarg.h>
 #include <stddef.h>
@@ -21,6 +22,12 @@ typedef struct
     void (*func)(void *args);
     void *args;
 } ats_thread_context_t;
+
+typedef struct
+{
+    void (*callback)(void *args);
+    void *args;
+} ats_timer_context_t;
 
 static ats_keypad_event_t s_keypad_event = { ATS_KEY_CODE_NONE, false };
 static uint32_t s_random_state = 0x13572468UL;
@@ -522,4 +529,120 @@ char *ats_serial_number_get(void)
     }
 
     return s_sn;
+}
+
+static void ats_timer_entry(TimerHandle_t xTimer)
+{
+    ats_timer_context_t *context = (ats_timer_context_t *)pvTimerGetTimerID(xTimer);
+
+    if (context != NULL)
+    {
+        if (context->callback != NULL)
+        {
+            context->callback(context->args);
+        }
+    }
+}
+
+int ats_timer_create(ats_timer_handle_t *handle, const char *name,
+                     ats_timer_type_t type, unsigned int period_ms,
+                     void (*callback)(void *args), void *args)
+{
+    ats_timer_context_t *context;
+    TimerHandle_t timer;
+    const char *timer_name = (name != NULL) ? name : "ats_timer";
+    const UBaseType_t auto_reload = (type == ATS_TIMER_PERIODIC) ? pdTRUE : pdFALSE;
+
+    if ((handle == NULL) || (callback == NULL) || (period_ms == 0U))
+    {
+        return ATS_EC_INVALID_PARAM;
+    }
+
+    context = (ats_timer_context_t *)pvPortMalloc(sizeof(*context));
+    if (context == NULL)
+    {
+        return ATS_EC_INVALID_PARAM;
+    }
+
+    context->callback = callback;
+    context->args = args;
+
+    timer = xTimerCreate(timer_name,
+                         pdMS_TO_TICKS(period_ms),
+                         auto_reload,
+                         (void *)context,
+                         ats_timer_entry);
+    if (timer == NULL)
+    {
+        vPortFree(context);
+        return ATS_EC_INVALID_PARAM;
+    }
+
+    *handle = (ats_timer_handle_t)timer;
+    return ATS_EC_OK;
+}
+
+int ats_timer_start(ats_timer_handle_t *handle)
+{
+    if ((handle == NULL) || (*handle == NULL))
+    {
+        return ATS_EC_INVALID_PARAM;
+    }
+
+    return (xTimerStart((TimerHandle_t)(*handle), 0U) == pdPASS) ? ATS_EC_OK : ATS_EC_INVALID_PARAM;
+}
+
+int ats_timer_stop(ats_timer_handle_t *handle)
+{
+    if ((handle == NULL) || (*handle == NULL))
+    {
+        return ATS_EC_INVALID_PARAM;
+    }
+
+    return (xTimerStop((TimerHandle_t)(*handle), 0U) == pdPASS) ? ATS_EC_OK : ATS_EC_INVALID_PARAM;
+}
+
+int ats_timer_reset(ats_timer_handle_t *handle)
+{
+    if ((handle == NULL) || (*handle == NULL))
+    {
+        return ATS_EC_INVALID_PARAM;
+    }
+
+    return (xTimerReset((TimerHandle_t)(*handle), 0U) == pdPASS) ? ATS_EC_OK : ATS_EC_INVALID_PARAM;
+}
+
+int ats_timer_delete(ats_timer_handle_t *handle)
+{
+    ats_timer_context_t *context;
+
+    if ((handle == NULL) || (*handle == NULL))
+    {
+        return ATS_EC_INVALID_PARAM;
+    }
+
+    context = (ats_timer_context_t *)pvTimerGetTimerID((TimerHandle_t)(*handle));
+
+    if (xTimerDelete((TimerHandle_t)(*handle), 0U) != pdPASS)
+    {
+        return ATS_EC_INVALID_PARAM;
+    }
+
+    if (context != NULL)
+    {
+        vPortFree(context);
+    }
+
+    *handle = NULL;
+    return ATS_EC_OK;
+}
+
+int ats_timer_is_running(ats_timer_handle_t *handle)
+{
+    if ((handle == NULL) || (*handle == NULL))
+    {
+        return 0;
+    }
+
+    return (xTimerIsTimerActive((TimerHandle_t)(*handle)) != pdFALSE) ? 1 : 0;
 }

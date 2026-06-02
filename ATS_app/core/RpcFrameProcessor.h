@@ -4,6 +4,8 @@
 #include <QString>
 
 class RpcSerialServer;
+class RpcNetWorker;
+class QThread;
 
 namespace RpcProtocol
 {
@@ -14,10 +16,15 @@ class RpcFrameProcessor : public QObject
 {
 public:
     explicit RpcFrameProcessor(RpcSerialServer *server);
+    ~RpcFrameProcessor() override;
 
     void setElfPath(const QString &path);
 
     void dispatchFrame(const RpcProtocol::Frame &frame);
+
+private slots:
+    void onSockRecvFinished(quint8 service, quint8 command, int received, QByteArray data);
+    void onSockConnectFinished(quint8 service, quint8 command, int ret);
 
 private:
     void postResponse(const QByteArray &frame);
@@ -37,4 +44,7 @@ private:
 
     QString m_elfPath;
     RpcSerialServer *m_server;
+
+    QThread *m_netThread = nullptr;
+    RpcNetWorker *m_netWorker = nullptr;
 };

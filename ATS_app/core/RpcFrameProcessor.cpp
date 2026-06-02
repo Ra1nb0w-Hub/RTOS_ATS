@@ -1,5 +1,6 @@
 #include "RpcFrameProcessor.h"
 #include "RpcSerialServer.h"
+#include "RpcNetWorker.h"
 
 #include <QTcpServer>
 #include <QTcpSocket>
@@ -40,6 +41,28 @@ static QByteArray buildInt32Response(qint32 value)
 RpcFrameProcessor::RpcFrameProcessor(RpcSerialServer *server)
     : QObject(nullptr), m_server(server)
 {
+    m_netThread = new QThread(this);
+    m_netWorker = new RpcNetWorker();
+    m_netWorker->moveToThread(m_netThread);
+
+    connect(m_netWorker, &RpcNetWorker::sockRecvFinished,
+            this, &RpcFrameProcessor::onSockRecvFinished,
+            Qt::QueuedConnection);
+    connect(m_netWorker, &RpcNetWorker::sockConnectFinished,
+            this, &RpcFrameProcessor::onSockConnectFinished,
+            Qt::QueuedConnection);
+
+    m_netThread->start();
+}
+
+RpcFrameProcessor::~RpcFrameProcessor()
+{
+    if (m_netThread) {
+        m_netThread->quit();
+        m_netThread->wait(5000);
+    }
+    delete m_netWorker;
+    m_netWorker = nullptr;
 }
 
 void RpcFrameProcessor::setElfPath(const QString &path)
@@ -92,6 +115,24 @@ void RpcFrameProcessor::postCrash(const QString &msg)
 {
     QMetaObject::invokeMethod(m_server, "crashMessage",
         Qt::QueuedConnection, Q_ARG(QString, msg));
+}
+
+void RpcFrameProcessor::onSockRecvFinished(quint8 service, quint8 command, int received, QByteArray data)
+{
+    QByteArray respPayload(4, '\0');
+    respPayload[0] = static_cast<char>(received & 0xFF);
+    respPayload[1] = static_cast<char>((received >> 8) & 0xFF);
+    respPayload[2] = static_cast<char>((received >> 16) & 0xFF);
+    respPayload[3] = static_cast<char>((received >> 24) & 0xFF);
+    if (received > 0) {
+        respPayload.append(data);
+    }
+    sendResponse(service, command, respPayload);
+}
+
+void RpcFrameProcessor::onSockConnectFinished(quint8 service, quint8 command, int ret)
+{
+    sendResponse(service, command, buildInt32Response(static_cast<qint32>(ret)));
 }
 
 void RpcFrameProcessor::sendResponse(quint8 service, quint8 command, const QByteArray &payload)
@@ -570,9 +611,12 @@ void RpcFrameProcessor::handleNetFrame(const RpcProtocol::Frame &frame)
             (static_cast<quint32>(static_cast<quint8>(data[5 + hostLen + 1])) << 8));
         const unsigned int timeoutMs = static_cast<unsigned int>(
             readInt32Le(data, 5 + hostLen + 2));
-        int ret = ats_sock_connect(sock, host.constData(), port, timeoutMs);
-        sendResponse(RpcProtocol::kServiceNet, RpcProtocol::kNetCommandSockConnect,
-                     buildInt32Response(static_cast<qint32>(ret)));
+
+        QMetaObject::invokeMethod(m_netWorker, [this, sock, host, port, timeoutMs]() {
+            m_netWorker->execSockConnect(sock, host, port, timeoutMs,
+                                          RpcProtocol::kServiceNet,
+                                          RpcProtocol::kNetCommandSockConnect);
+        }, Qt::QueuedConnection);
         return;
     }
 
@@ -593,18 +637,11 @@ void RpcFrameProcessor::handleNetFrame(const RpcProtocol::Frame &frame)
         const unsigned int bufLen = static_cast<unsigned int>(readInt32Le(data, 4));
         const unsigned int timeoutMs = static_cast<unsigned int>(readInt32Le(data, 8));
 
-        QByteArray recvBuf(static_cast<int>(bufLen), '\0');
-        int received = ats_sock_recv(sock, recvBuf.data(), bufLen, timeoutMs);
-
-        QByteArray respPayload(4, '\0');
-        respPayload[0] = static_cast<char>(received & 0xFF);
-        respPayload[1] = static_cast<char>((received >> 8) & 0xFF);
-        respPayload[2] = static_cast<char>((received >> 16) & 0xFF);
-        respPayload[3] = static_cast<char>((received >> 24) & 0xFF);
-        if (received > 0) {
-            respPayload.append(recvBuf.left(received));
-        }
-        sendResponse(RpcProtocol::kServiceNet, RpcProtocol::kNetCommandSockRecv, respPayload);
+        QMetaObject::invokeMethod(m_netWorker, [this, sock, bufLen, timeoutMs]() {
+            m_netWorker->execSockRecv(sock, bufLen, timeoutMs,
+                                       RpcProtocol::kServiceNet,
+                                       RpcProtocol::kNetCommandSockRecv);
+        }, Qt::QueuedConnection);
         return;
     }
 
