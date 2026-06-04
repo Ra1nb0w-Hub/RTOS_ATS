@@ -105,6 +105,7 @@ void LuaEngine::registerAtsApi()
     /* 打印机 API */
     reg("printer_open",             lua_ats_printer_open);
     reg("printer_close",            lua_ats_printer_close);
+    reg("printer_start",            lua_ats_printer_start);
     reg("printer_set_align",        lua_ats_printer_set_align);
     reg("printer_set_font_size",    lua_ats_printer_set_font_size);
     reg("printer_print_data",       lua_ats_printer_print_data);
@@ -275,6 +276,14 @@ int LuaEngine::lua_ats_printer_open(lua_State *L)
 int LuaEngine::lua_ats_printer_close(lua_State *L)
 {
     int ret = ats_printer_close();
+    lua_pushinteger(L, ret);
+    return 1;
+}
+
+// ats.printer_start() → ret(int)
+int LuaEngine::lua_ats_printer_start(lua_State *L)
+{
+    int ret = ats_printer_start();
     lua_pushinteger(L, ret);
     return 1;
 }

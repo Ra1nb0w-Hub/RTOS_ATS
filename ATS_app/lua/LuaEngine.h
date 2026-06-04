@@ -81,6 +81,7 @@ private:
     /* ── 打印机 API ── */
     static int lua_ats_printer_open            (lua_State *L);
     static int lua_ats_printer_close           (lua_State *L);
+    static int lua_ats_printer_start           (lua_State *L);
     static int lua_ats_printer_set_align       (lua_State *L);
     static int lua_ats_printer_set_font_size   (lua_State *L);
     static int lua_ats_printer_print_data      (lua_State *L);

@@ -325,7 +325,12 @@ function run()
     
     -- 底部空行
     print_empty_line(5)
-    
+
+    -- 开始打印
+    ret = ats.printer_start()
+    ats.assert_true(ret == 0, "打印机开始打印失败")
+    ats.log("打印机已开始打印")
+
     -- 关闭打印机
     ret = ats.printer_close()
     ats.assert_true(ret == 0, "打印机关闭失败")
