@@ -70,7 +70,7 @@ static void _add_candidate_app(EMVAppParameter *app_parameter, const unsigned ch
     }
 
     // 加入候选应用列表
-    candidate_app = (EMVCandidateApp *)malloc(sizeof(EMVCandidateApp));
+    candidate_app = (EMVCandidateApp *)g_emv_terminal.malloc(sizeof(EMVCandidateApp));
     if (candidate_app == NULL)
     {
         EmvLog("malloc failed(%d bytes)", sizeof(EMVCandidateApp));
@@ -91,7 +91,7 @@ static void _add_candidate_app(EMVAppParameter *app_parameter, const unsigned ch
     if (ret != EMV_OK)
     {
         if (candidate_app)
-            free(candidate_app);
+            g_emv_terminal.free(candidate_app);
 
         EmvLog("emv_tools_container_add failed(%d)", ret);
         return;

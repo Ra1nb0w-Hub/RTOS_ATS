@@ -147,6 +147,14 @@ int emv_terminal_set_config(const EMVTerminalConfig *config)
         return EMV_ERR_INVALID_PARAM;
     }
 
+    // 检查内存分配接口是否为空
+    if (g_emv_terminal.malloc == NULL)
+        g_emv_terminal.malloc = malloc;
+
+    // 检查内存释放接口是否为空
+    if (g_emv_terminal.free == NULL)
+        g_emv_terminal.free = free;
+
     // 检查随机数接口是否为空
     if (g_emv_terminal.random_callback == NULL)
     {

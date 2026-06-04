@@ -326,7 +326,7 @@ int emv_cmd_get_processing_options(unsigned char *pdol, size_t pdol_len, EMVAppF
 
     // 分配内存
     *afl_count = data_len / sizeof(EMVAppFileLocator);
-    *afl = (EMVAppFileLocator *) malloc((*afl_count) * sizeof(EMVAppFileLocator));
+    *afl = (EMVAppFileLocator *) g_emv_terminal.malloc((*afl_count) * sizeof(EMVAppFileLocator));
     if (*afl == NULL)
     {
         EmvLog("malloc failed");

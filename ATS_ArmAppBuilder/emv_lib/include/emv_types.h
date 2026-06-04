@@ -38,6 +38,21 @@ typedef enum EMVTransactionType {
 } EMVTransactionType;
 
 /**
+ * @brief 内存分配函数。
+ * 
+ * @param uiSize 内存大小。
+ * @return 内存指针。
+ */
+typedef void* (*EMVMalloc)(unsigned int uiSize);
+
+/**
+ * @brief 内存释放函数。
+ * 
+ * @param pvAddress 内存指针。
+ */
+typedef void (*EMVFree)(void *pvAddress);
+
+/**
  * @brief 日志回调函数。
  * 
  * @param pcMessage 日志消息指针。
@@ -116,6 +131,8 @@ typedef struct EMVTerminalConfig {
     bool support_contact;                              // 支持接触式卡片
     bool support_contactless;                          // 支持非接触式卡片
 
+    EMVMalloc malloc;                                  // 内存分配函数
+    EMVFree free;                                      // 内存释放函数
     EMVLogCallback log_callback;                       // 日志回调函数
     EMVRandomCallback random_callback;                 // 随机数回调函数
     EMVDetectCardCallback detect_card_callback;        // 检测卡片回调函数

@@ -403,7 +403,7 @@ int emv_tlv_set(uint16_t tag, const unsigned char *value, size_t length)
             {
                 unsigned char *new_value = NULL;
                     
-                new_value = (unsigned char *)malloc(length);
+                new_value = (unsigned char *)g_emv_terminal.malloc(length);
                 if (new_value == NULL)
                 {
                     EmvLog("malloc failed(%d bytes)", length);
@@ -411,7 +411,7 @@ int emv_tlv_set(uint16_t tag, const unsigned char *value, size_t length)
                 }
                 memset(new_value, 0, length);
 
-                free(tlv->value);
+                g_emv_terminal.free(tlv->value);
                 tlv->value = new_value;
             }
 
@@ -430,7 +430,7 @@ int emv_tlv_set(uint16_t tag, const unsigned char *value, size_t length)
         return ret;
     }
 
-    tlv = (EMVTlvData *)malloc(sizeof(EMVTlvData));
+    tlv = (EMVTlvData *)g_emv_terminal.malloc(sizeof(EMVTlvData));
     if (tlv == NULL)
     {
         EmvLog("malloc failed(%d bytes)", sizeof(EMVTlvData));
@@ -442,7 +442,7 @@ int emv_tlv_set(uint16_t tag, const unsigned char *value, size_t length)
     tlv->length = length;
     if (length > 0)
     {
-        tlv->value = (unsigned char *)malloc(length);
+        tlv->value = (unsigned char *)g_emv_terminal.malloc(length);
         if (tlv->value == NULL)
         {
             EmvLog("malloc failed(%d bytes)", length);
@@ -458,7 +458,7 @@ int emv_tlv_set(uint16_t tag, const unsigned char *value, size_t length)
     if (ret != EMV_OK)
     {
         if (tlv)
-            free(tlv);
+            g_emv_terminal.free(tlv);
 
         EmvLog("emv_tools_container_add failed(%d)", ret);
         return ret;
@@ -558,13 +558,13 @@ void emv_tlv_clear(void)
             continue;
 
         if (tlv->value && tlv->length)
-            free(tlv->value);
+            g_emv_terminal.free(tlv->value);
 
         tlv->value = NULL;
         tlv->length = 0;
         tlv->tag = 0;
 
-        free(g_emv_session.tlv.items[i]);
+        g_emv_terminal.free(g_emv_session.tlv.items[i]);
         g_emv_session.tlv.items[i] = NULL;
     }
 

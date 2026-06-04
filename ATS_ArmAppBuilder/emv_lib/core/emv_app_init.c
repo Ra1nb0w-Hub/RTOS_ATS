@@ -196,7 +196,7 @@ int emv_app_init(void)
     ret = EMV_OK;
 exit:
     if (afl_array)
-        free(afl_array);
+        g_emv_terminal.free(afl_array);
 
     return ret;
 }

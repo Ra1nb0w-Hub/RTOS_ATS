@@ -44,7 +44,7 @@ int emv_tools_container_init(EMVContainer *container, size_t capacity)
     if (container->capacity == 0)
         container->count = 0;
 
-    items = (void **)malloc(capacity * sizeof(void **));
+    items = (void **)g_emv_terminal.malloc(capacity * sizeof(void **));
     if (items == NULL)
     {
         EmvLog("malloc failed(capacity: %d, %d bytes)", capacity, capacity * sizeof(void **));
@@ -56,7 +56,7 @@ int emv_tools_container_init(EMVContainer *container, size_t capacity)
     if (container->items != NULL && container->count > 0)
     {
         memcpy(items, container->items, container->count * sizeof(void **));
-        free(container->items);
+        g_emv_terminal.free(container->items);
     }
     
     container->items = items;
@@ -124,12 +124,12 @@ int emv_tools_container_clear(EMVContainer *container)
         {
             if (container->items[i] != NULL)
             {
-                free(container->items[i]);
+                g_emv_terminal.free(container->items[i]);
                 container->items[i] = NULL;
             }
         }
 
-        free(container->items);
+        g_emv_terminal.free(container->items);
         container->items = NULL;
     }
 

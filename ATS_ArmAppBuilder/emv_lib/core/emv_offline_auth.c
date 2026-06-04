@@ -525,7 +525,7 @@ int emv_offline_auth_add_record(const unsigned char *data, size_t length)
         return ret;
     }
 
-    record = (EMVOfflineAuthRecord *)malloc(sizeof(EMVOfflineAuthRecord));
+    record = (EMVOfflineAuthRecord *)g_emv_terminal.malloc(sizeof(EMVOfflineAuthRecord));
     if (record == NULL)
     {
         EmvLog("malloc failed(%d bytes)", sizeof(EMVOfflineAuthRecord));

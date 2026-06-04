@@ -81,7 +81,7 @@ int emv_app_parameter_import(const EMVAppParameter *new_app_parameter)
         return ret;
     }
 
-    temp_app_parameter = (EMVAppParameter *)malloc(sizeof(EMVAppParameter));
+    temp_app_parameter = (EMVAppParameter *)g_emv_terminal.malloc(sizeof(EMVAppParameter));
     if (temp_app_parameter == NULL)
     {
         EmvLog("EMVAppParameter malloc failed(%d bytes)", sizeof(EMVAppParameter));
@@ -93,7 +93,7 @@ int emv_app_parameter_import(const EMVAppParameter *new_app_parameter)
     if (ret != EMV_OK)
     {
         if (temp_app_parameter)
-            free(temp_app_parameter);
+            g_emv_terminal.free(temp_app_parameter);
 
         EmvLog("emv_tools_container_add failed(%d)", ret);
         return ret;

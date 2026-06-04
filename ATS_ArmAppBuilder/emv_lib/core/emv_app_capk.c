@@ -77,7 +77,7 @@ int emv_capk_import(const EMVCapk *new_capk)
         return ret;
     }
 
-    temp_capk = (EMVCapk *)malloc(sizeof(EMVCapk));
+    temp_capk = (EMVCapk *)g_emv_terminal.malloc(sizeof(EMVCapk));
     if (!temp_capk)
     {
         EmvLog("malloc failed(%d bytes)", sizeof(EMVCapk));
@@ -89,7 +89,7 @@ int emv_capk_import(const EMVCapk *new_capk)
     if (ret != EMV_OK)
     {
         if (temp_capk)
-            free(temp_capk);
+            g_emv_terminal.free(temp_capk);
 
         EmvLog("emv_tools_container_add failed(%d)", ret);
         return ret;
