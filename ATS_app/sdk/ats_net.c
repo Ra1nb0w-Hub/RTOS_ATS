@@ -35,8 +35,8 @@
  * 内部状态变量
  * ========================================================= */
 
-static bool s_net_status = true;      /* 网络状态 */
-static bool s_net_status_set = false; /* 是否手动设置过状态 */
+static ats_net_rpc_callback_t s_net_rpc_callback = {0};
+static bool s_net_status = true;
 static ats_net_mode_t s_net_mode = ATS_NET_MODE_CELLUALR;
 
 static bool s_wifi_module_status = true;
@@ -129,6 +129,19 @@ static int ensure_winsock(void)
             return -1;
         s_winsock_initialized = true;
     }
+    return 0;
+}
+
+/* =========================================================
+ * RPC 回调函数
+ * ========================================================= */
+
+int ats_net_rpc_register_callback(ats_net_rpc_callback_t *callback)
+{
+    if (!callback)
+        return -1;
+
+    memcpy(&s_net_rpc_callback, callback, sizeof(ats_net_rpc_callback_t));
     return 0;
 }
 
@@ -317,12 +330,9 @@ int ats_sock_recv(ats_sock_t sock, void *buf, unsigned int len, unsigned int tim
         return (ret >= 0) ? ret : -2;
     }
 
-    /* 设置接收超时 */
-    if (timeout_ms > 0)
-    {
-        DWORD tv = (DWORD)timeout_ms;
-        setsockopt(ctx->raw_sock, SOL_SOCKET, SO_RCVTIMEO, (const char *)&tv, sizeof(tv));
-    }
+    /* 设置接收超时（始终设置，避免残留旧超时值） */
+    DWORD tv = (DWORD)timeout_ms;
+    setsockopt(ctx->raw_sock, SOL_SOCKET, SO_RCVTIMEO, (const char *)&tv, sizeof(tv));
 
     int ret = recv(ctx->raw_sock, (char *)buf, (int)len, 0);
     return (ret == SOCKET_ERROR) ? -2 : ret;
@@ -361,6 +371,10 @@ int ats_sock_close(ats_sock_t sock)
 int ats_net_set_mode(ats_net_mode_t mode)
 {
     s_net_mode = mode;
+
+    if (s_net_rpc_callback.net_mode_change)
+        s_net_rpc_callback.net_mode_change(mode);
+
     return 0;
 }
 
@@ -372,35 +386,16 @@ ats_net_mode_t ats_net_get_mode(void)
 int ats_net_set_status(bool status)
 {
     s_net_status = status;
-    s_net_status_set = true;
+
+    if (s_net_rpc_callback.net_status_change)
+        s_net_rpc_callback.net_status_change(status);
+
     return 0;
 }
 
 bool ats_net_get_status(void)
 {
-    /* 优先返回手动设置的状态 */
-    if (s_net_status_set)
-    {
-        return s_net_status;
-    }
-
-    /* 通过 Windows API 检查真实网络状态 */
-    if (ensure_winsock() != 0)
-        return false;
-
-    struct addrinfo hints, *res = NULL;
-    memset(&hints, 0, sizeof(hints));
-    hints.ai_family = AF_INET;
-    hints.ai_socktype = SOCK_STREAM;
-
-    /* 尝试解析公共DNS，判断网络是否可用 */
-    int ret = getaddrinfo("8.8.8.8", NULL, &hints, &res);
-    if (ret == 0 && res)
-    {
-        freeaddrinfo(res);
-        return true;
-    }
-    return false;
+    return s_net_status;
 }
 
 /* =========================================================
@@ -410,6 +405,10 @@ bool ats_net_get_status(void)
 int ats_net_wifi_set_module_status(bool status)
 {
     s_wifi_module_status = status;
+
+    if (s_net_rpc_callback.wifi_module_status_change)
+        s_net_rpc_callback.wifi_module_status_change(status);
+
     return 0;
 }
 

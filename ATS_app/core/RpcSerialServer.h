@@ -23,6 +23,7 @@ public:
     void stop();
     quint16 listenPort() const;
     bool isListening() const;
+    RpcFrameProcessor *processor() const;
 
     void setElfPath(const QString &path);
 

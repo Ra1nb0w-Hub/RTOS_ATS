@@ -19,12 +19,14 @@ public:
     ~RpcFrameProcessor() override;
 
     void setElfPath(const QString &path);
-
     void dispatchFrame(const RpcProtocol::Frame &frame);
 
+public slots:
+    void onReportPaperStatus(bool status);
+
 private slots:
-    void onSockRecvFinished(quint8 service, quint8 command, int received, QByteArray data);
-    void onSockConnectFinished(quint8 service, quint8 command, int ret);
+    void onSockRecvFinished(quint8 service, quint8 command, int sock, int received, QByteArray data);
+    void onSockConnectFinished(quint8 service, quint8 command, int sock, int ret);
 
 private:
     void postResponse(const QByteArray &frame);
@@ -33,6 +35,8 @@ private:
 
     void sendResponse(quint8 service, quint8 command, const QByteArray &payload);
     void sendResponse(quint8 service, quint8 command);
+    void sendEvent(quint8 service, quint8 command, const QByteArray &payload);
+    void sendEvent(quint8 service, quint8 command);
 
     void handleCoreFrame(const RpcProtocol::Frame &frame);
     void handleLcdFrame(const RpcProtocol::Frame &frame);

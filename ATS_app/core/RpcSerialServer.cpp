@@ -65,6 +65,11 @@ bool RpcSerialServer::isListening() const
     return m_server->isListening();
 }
 
+RpcFrameProcessor *RpcSerialServer::processor() const
+{
+    return m_processor;
+}
+
 void RpcSerialServer::setElfPath(const QString &path)
 {
     m_elfPath = path;

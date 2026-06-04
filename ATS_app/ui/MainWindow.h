@@ -12,6 +12,7 @@
 #include "log/LogManager.h"
 #include "core/QemuController.h"
 #include "core/RpcSerialServer.h"
+#include "core/RpcFrameProcessor.h"
 #include "sdk/ats_sys.h"
 #include "sdk/ats_printer.h"
 

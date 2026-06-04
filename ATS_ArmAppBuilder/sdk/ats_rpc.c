@@ -1,6 +1,8 @@
 #include "ats_rpc.h"
 #include "ats_error.h"
 #include "ats_sys.h"
+#include "ats_net.h"
+#include "ats_printer.h"
 
 #include "FreeRTOS/FreeRTOS.h"
 #include "FreeRTOS/portable.h"
@@ -40,10 +42,13 @@ typedef struct
     uint16_t            response_buf_size;
     uint16_t           *response_len;
     int                 result;
+    uint32_t            match_key;
     SemaphoreHandle_t   semaphore;
     bool                in_use;
 } ats_rpc_pending_t;
 
+static ats_net_rpc_callback_t     s_net_rpc_callback = {0};
+static ats_printer_rpc_callback_t s_printer_rpc_callback = {0};
 static ats_rpc_pending_t          s_pending[ATS_RPC_MAX_PENDING];
 static ats_rpc_handler_t          s_handlers[ATS_RPC_MAX_SERVICES];
 static bool                       s_rpc_initialized = false;
@@ -186,15 +191,28 @@ static int ats_rpc_transport_read(uint8_t *byte, uint32_t timeout_ms)
  *  RPC protocol engine
  * ================================================================== */
 
-static void write_u16_le(uint8_t *buffer, uint16_t value)
+void ats_rpc_write_u16_le(uint8_t *buffer, uint16_t value)
 {
     buffer[0] = (uint8_t)(value & 0xFFU);
     buffer[1] = (uint8_t)((value >> 8) & 0xFFU);
 }
 
-static uint16_t read_u16_le(const uint8_t *buffer)
+uint16_t ats_rpc_read_u16_le(const uint8_t *buffer)
 {
     return (uint16_t)buffer[0] | ((uint16_t)buffer[1] << 8);
+}
+
+void ats_rpc_write_u32_le(uint8_t *buffer, uint32_t value)
+{
+    buffer[0] = (uint8_t)(value & 0xFFU);
+    buffer[1] = (uint8_t)((value >> 8) & 0xFFU);
+    buffer[2] = (uint8_t)((value >> 16) & 0xFFU);
+    buffer[3] = (uint8_t)((value >> 24) & 0xFFU);
+}
+
+uint32_t ats_rpc_read_u32_le(const uint8_t *buffer)
+{
+    return (uint32_t)buffer[0] | ((uint32_t)buffer[1] << 8) | ((uint32_t)buffer[2] << 16) | ((uint32_t)buffer[3] << 24);
 }
 
 static int read_exact(uint8_t *buffer, uint16_t length, uint32_t timeout_ms)
@@ -231,13 +249,13 @@ static int send_frame(uint8_t frame_type, uint8_t service, uint8_t command, cons
 
     if (!s_rpc_initialized)
     {
-        return ATS_RPC_EC_NOT_INIT;
+        return ATS_EC_RPC_NOT_INIT;
     }
 
-    frame_buffer = (uint8_t *)pvPortMalloc(frame_length);
+    frame_buffer = (uint8_t *)ats_malloc(frame_length);
     if (frame_buffer == NULL)
     {
-        return ATS_RPC_EC_NO_MEMORY;
+        return ATS_EC_NO_MEMORY;
     }
 
     frame_buffer[0] = ATS_RPC_SOF0;
@@ -245,7 +263,7 @@ static int send_frame(uint8_t frame_type, uint8_t service, uint8_t command, cons
     frame_buffer[2] = frame_type;
     frame_buffer[3] = service;
     frame_buffer[4] = command;
-    write_u16_le(&frame_buffer[5], payload_length);
+    ats_rpc_write_u16_le(&frame_buffer[5], payload_length);
 
     if (payload_length != 0U)
     {
@@ -253,7 +271,7 @@ static int send_frame(uint8_t frame_type, uint8_t service, uint8_t command, cons
     }
 
     status = ats_rpc_transport_write(frame_buffer, frame_length);
-    vPortFree(frame_buffer);
+    ats_free(frame_buffer);
     return status;
 }
 
@@ -302,20 +320,20 @@ static int recv_frame(ats_rpc_frame_t *frame, uint32_t timeout_ms)
         return status;
     }
 
-    payload_length = read_u16_le(&header[5]);
+    payload_length = ats_rpc_read_u16_le(&header[5]);
 
     if (payload_length != 0U)
     {
-        data_buffer = (uint8_t *)pvPortMalloc(payload_length);
+        data_buffer = (uint8_t *)ats_malloc(payload_length);
         if (data_buffer == NULL)
         {
-            return ATS_RPC_EC_NO_MEMORY;
+            return ATS_EC_NO_MEMORY;
         }
 
         status = read_exact(data_buffer, payload_length, timeout_ms);
         if (status != ATS_EC_OK)
         {
-            vPortFree(data_buffer);
+            ats_free(data_buffer);
             return status;
         }
 
@@ -357,7 +375,7 @@ static void rpc_task(void *args)
 
         if (frame.payload != NULL)
         {
-            vPortFree(frame.payload);
+            ats_free(frame.payload);
             frame.payload = NULL;
         }
     }
@@ -443,6 +461,11 @@ int ats_rpc_response(uint8_t service, uint8_t command, const uint8_t *payload, u
 
 int ats_rpc_request(uint8_t service, uint8_t command, const uint8_t *request_payload, uint16_t request_length, uint8_t *response_payload, uint16_t *response_length, uint32_t timeout_ms)
 {
+    return ats_rpc_request_ex(service, command, request_payload, request_length, response_payload, response_length, timeout_ms, 0U);
+}
+
+int ats_rpc_request_ex(uint8_t service, uint8_t command, const uint8_t *request_payload, uint16_t request_length, uint8_t *response_payload, uint16_t *response_length, uint32_t timeout_ms, uint32_t match_key)
+{
     int slot = -1;
     int status;
     TickType_t wait_ticks;
@@ -455,7 +478,7 @@ int ats_rpc_request(uint8_t service, uint8_t command, const uint8_t *request_pay
 
     if (!s_rpc_initialized)
     {
-        return ATS_RPC_EC_NOT_INIT;
+        return ATS_EC_RPC_NOT_INIT;
     }
 
     taskENTER_CRITICAL();
@@ -472,7 +495,7 @@ int ats_rpc_request(uint8_t service, uint8_t command, const uint8_t *request_pay
 
     if (slot < 0)
     {
-        return ATS_RPC_EC_NO_MEMORY;
+        return ATS_EC_NO_MEMORY;
     }
 
     s_pending[slot].service          = service;
@@ -481,6 +504,7 @@ int ats_rpc_request(uint8_t service, uint8_t command, const uint8_t *request_pay
     s_pending[slot].response_buf_size = *response_length;
     s_pending[slot].response_len     = response_length;
     s_pending[slot].result           = ATS_EC_TIMEOUT;
+    s_pending[slot].match_key        = match_key;
 
     status = send_frame(ATS_RPC_FRAME_TYPE_REQUEST, service, command, request_payload, request_length);
     if (status != ATS_EC_OK)
@@ -509,6 +533,9 @@ void ats_rpc_init(void)
     {
         return;
     }
+
+    ats_net_rpc_register_callback(&s_net_rpc_callback);
+    ats_printer_rpc_register_callback(&s_printer_rpc_callback);
 
     for (i = 0U; i < ATS_RPC_MAX_PENDING; ++i)
     {
@@ -560,15 +587,27 @@ void ats_rpc_dispatch(const ats_rpc_frame_t *frame)
 
     if (frame->frame_type == ATS_RPC_FRAME_TYPE_RESPONSE)
     {
+        uint32_t resp_match_key = 0U;
+
+        /* 提取响应 payload 前 4 字节作为 match_key (用于多 socket 场景的请求匹配) */
+        if (frame->payload_length >= 4U)
+            resp_match_key = ats_rpc_read_u32_le(frame->payload);
+
         for (i = 0U; i < ATS_RPC_MAX_PENDING; ++i)
         {
             if (s_pending[i].in_use &&
                 (s_pending[i].service == frame->service) &&
                 (s_pending[i].command == frame->command))
             {
+                /* 如果待处理槽设置了 match_key，则必须与响应匹配 */
+                if (s_pending[i].match_key != 0U && s_pending[i].match_key != resp_match_key)
+                {
+                    continue; /* 跳过，继续查找下一个匹配 */
+                }
+
                 if (frame->payload_length > s_pending[i].response_buf_size)
                 {
-                    s_pending[i].result = ATS_RPC_EC_TOO_LARGE;
+                    s_pending[i].result = ATS_EC_TOO_LARGE;
                 }
                 else
                 {

@@ -19,6 +19,20 @@ typedef enum {
     ATS_PRINTER_FONT_SIZE_DOUBLE_WIDTH_HEIGHT,   // 2倍宽高
 } ats_printer_font_size_t;
 
+typedef struct {
+    void (*paper_status_change)(bool status);
+    void (*show_print_content)(void);
+} ats_printer_rpc_callback_t;
+
+/**
+ * @brief 注册打印机RPC回调函数
+ *
+ * @param callback 回调函数指针
+ *
+ * @return 0:成功 <0:失败
+ */
+int ats_printer_rpc_register_callback(ats_printer_rpc_callback_t *callback);
+
 /**
  * @brief 打开打印机
  *
@@ -131,21 +145,6 @@ bool ats_printer_get_paper_status(void);
  * @return 缓冲区指针，无数据时返回 NULL
  */
 const unsigned char *ats_printer_get_receipt_buffer(int *width, int *height);
-
-/**
- * @brief 小票关闭回调函数类型
- *
- * 当 ats_printer_close() 被调用时，如果注册了回调，会调用此函数。
- * 回调在调用者的线程上下文中执行（通常是 AppThread）。
- */
-typedef void (*ats_printer_close_callback_t)(void);
-
-/**
- * @brief 注册小票关闭回调
- *
- * @param callback 回调函数指针，传 NULL 取消注册
- */
-void ats_printer_set_close_callback(ats_printer_close_callback_t callback);
 
 #ifdef __cplusplus
 }

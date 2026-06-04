@@ -8,10 +8,10 @@ namespace RpcProtocol
 {
 static constexpr quint8 kSof0 = 0xA5;
 static constexpr quint8 kSof1 = 0x5A;
-static constexpr quint8 kVersion = 0x02;
 static constexpr quint8 kFrameTypeRequest = 1;
 static constexpr quint8 kFrameTypeResponse = 2;
 static constexpr quint8 kFrameTypeEvent = 3;
+
 static constexpr quint8 kServiceCore = 1;
 static constexpr quint8 kServiceLcd = 2;
 static constexpr quint8 kServicePrinter = 3;
@@ -19,26 +19,26 @@ static constexpr quint8 kServiceFs = 4;
 static constexpr quint8 kServiceNet = 5;
 static constexpr quint8 kServiceAudio = 6;
 static constexpr quint8 kServiceReader = 7;
+
 static constexpr quint8 kCoreCommandWriteLog = 1;
 static constexpr quint8 kCoreCommandCrash = 2;
-static constexpr quint8 kCoreCommandSetDateTime = 3;
-static constexpr quint8 kCoreCommandGetDateTime = 4;
-static constexpr quint8 kCoreCommandGetTimestamp = 5;
-static constexpr quint8 kCoreCommandGetSerialNumber = 6;
+static constexpr quint8 kCoreCommandGetTimestamp = 3;
+static constexpr quint8 kCoreCommandGetSerialNumber = 4;
+
 static constexpr quint8 kLcdCommandInit = 1;
 static constexpr quint8 kLcdCommandDrawRectangle = 2;
 static constexpr quint8 kLcdCommandFillRectangle = 3;
 static constexpr quint8 kLcdCommandDraw1BitBitmap = 4;
 static constexpr quint8 kLcdCommandDraw16BitBitmap = 5;
 static constexpr quint8 kLcdCommandDeinit = 6;
+
 static constexpr quint8 kPrinterCommandOpen = 1;
 static constexpr quint8 kPrinterCommandClose = 2;
-static constexpr quint8 kPrinterCommandSetAlign = 3;
-static constexpr quint8 kPrinterCommandSetFontSize = 4;
-static constexpr quint8 kPrinterCommandPrintText = 5;
-static constexpr quint8 kPrinterCommandPrintBitmap = 6;
-static constexpr quint8 kPrinterCommandSetPaperStatus = 7;
-static constexpr quint8 kPrinterCommandGetPaperStatus = 8;
+static constexpr quint8 kPrinterCommandStart = 3;
+static constexpr quint8 kPrinterCommandPrintText = 4;
+static constexpr quint8 kPrinterCommandPrintBitmap = 5;
+static constexpr quint8 kPrinterCommandSetPaperStatus = 6;
+
 static constexpr quint8 kFsCommandOpen = 1;
 static constexpr quint8 kFsCommandClose = 2;
 static constexpr quint8 kFsCommandRead = 3;
@@ -47,43 +47,30 @@ static constexpr quint8 kFsCommandSeek = 5;
 static constexpr quint8 kFsCommandSize = 6;
 static constexpr quint8 kFsCommandRemove = 7;
 static constexpr quint8 kFsCommandExist = 8;
+
 static constexpr quint8 kNetCommandSockCreate = 1;
 static constexpr quint8 kNetCommandSockConnect = 2;
 static constexpr quint8 kNetCommandSockSend = 3;
 static constexpr quint8 kNetCommandSockRecv = 4;
 static constexpr quint8 kNetCommandSockClose = 5;
 static constexpr quint8 kNetCommandSetMode = 6;
-static constexpr quint8 kNetCommandGetMode = 7;
-static constexpr quint8 kNetCommandSetStatus = 8;
-static constexpr quint8 kNetCommandGetStatus = 9;
-static constexpr quint8 kNetCommandWifiSetModuleStatus = 10;
-static constexpr quint8 kNetCommandWifiGetModuleStatus = 11;
-static constexpr quint8 kNetCommandWifiSetSsid = 12;
-static constexpr quint8 kNetCommandWifiGetSsid = 13;
-static constexpr quint8 kNetCommandWifiSetSignal = 14;
-static constexpr quint8 kNetCommandWifiGetSignal = 15;
-static constexpr quint8 kNetCommandWifiSetApList = 16;
-static constexpr quint8 kNetCommandWifiGetApList = 17;
-static constexpr quint8 kNetCommandCellularSetMcc = 18;
-static constexpr quint8 kNetCommandCellularGetMcc = 19;
-static constexpr quint8 kNetCommandCellularSetMnc = 20;
-static constexpr quint8 kNetCommandCellularGetMnc = 21;
-static constexpr quint8 kNetCommandCellularSetLac = 22;
-static constexpr quint8 kNetCommandCellularGetLac = 23;
-static constexpr quint8 kNetCommandCellularSetCellId = 24;
-static constexpr quint8 kNetCommandCellularGetCellId = 25;
-static constexpr quint8 kNetCommandCellularSetSignal = 26;
-static constexpr quint8 kNetCommandCellularGetSignal = 27;
-static constexpr quint8 kNetCommandCellularSetImsi = 28;
-static constexpr quint8 kNetCommandCellularGetImsi = 29;
-static constexpr quint8 kNetCommandCellularSetImei = 30;
-static constexpr quint8 kNetCommandCellularGetImei = 31;
+static constexpr quint8 kNetCommandStatusChange = 7;
+static constexpr quint8 kNetCommandWifiModuleStatusChange = 8;
+static constexpr quint8 kNetCommandWifiGetSsid = 9;
+static constexpr quint8 kNetCommandWifiGetSignal = 10;
+static constexpr quint8 kNetCommandWifiGetApList = 11;
+static constexpr quint8 kNetCommandCellularGetMcc = 12;
+static constexpr quint8 kNetCommandCellularGetMnc = 13;
+static constexpr quint8 kNetCommandCellularGetLac = 14;
+static constexpr quint8 kNetCommandCellularGetCellId = 15;
+static constexpr quint8 kNetCommandCellularGetSignal = 16;
+static constexpr quint8 kNetCommandCellularGetImsi = 17;
+static constexpr quint8 kNetCommandCellularGetImei = 18;
+
 static constexpr quint8 kAudioCommandSetVolume = 1;
 static constexpr quint8 kAudioCommandGetVolume = 2;
 static constexpr quint8 kAudioCommandPlayFile = 3;
-static constexpr quint8 kAudioCommandInit = 4;
-static constexpr quint8 kAudioCommandShutdown = 5;
-static constexpr quint8 kAudioCommandIsPlaying = 6;
+
 static constexpr quint8 kReaderCommandInit = 1;
 static constexpr quint8 kReaderCommandOpen = 2;
 static constexpr quint8 kReaderCommandClose = 3;
@@ -96,9 +83,11 @@ static constexpr quint8 kReaderCommandPiccActivate = 9;
 static constexpr quint8 kReaderCommandPiccDeactivate = 10;
 static constexpr quint8 kReaderCommandPiccTransceiveApdu = 11;
 static constexpr quint8 kReaderCommandGetLastHwError = 12;
+
 static constexpr quint8 kBitmapEncodingRaw = 0;
 static constexpr quint8 kBitmapEncodingRle8 = 1;
 static constexpr quint8 kBitmapEncodingRle16 = 2;
+
 static constexpr int kHeaderSize = 7;
 
 struct Frame
@@ -153,6 +142,8 @@ struct LcdBitmap16Event
 struct PrinterPrintTextEvent
 {
     bool isEndOfLine = false;
+    quint8 alignMode = 0;
+    quint8 fontSize = 0;
     QByteArray text;
 };
 
@@ -160,6 +151,7 @@ struct PrinterPrintBitmapEvent
 {
     quint16 width = 0;
     quint16 height = 0;
+    quint8 alignMode = 0;
     QByteArray bitmapData;
 };
 
@@ -183,13 +175,13 @@ struct CrashEvent
     quint32 mmfar = 0;
 };
 
-QByteArray buildResponseFrame(quint8 service, quint8 command,
-                              const QByteArray &payload = QByteArray());
+QByteArray buildResponseFrame(quint8 service, quint8 command, const QByteArray &payload = QByteArray());
+QByteArray buildEventFrame(quint8 service, quint8 command, const QByteArray &payload = QByteArray());
+
 bool tryExtractFrame(QByteArray *buffer, Frame *frame);
 bool decodeLogEvent(const Frame &frame, LogEvent *event);
 bool decodeCrashEvent(const Frame &frame, CrashEvent *event);
 bool isCoreRequest(const Frame &frame, quint8 expectedCommand);
-bool decodeCoreDateTimeRequest(const Frame &frame, DateTime *dt);
 bool isLcdEvent(const Frame &frame);
 bool decodeLcdInitEvent(const Frame &frame, LcdInitEvent *event);
 bool decodeLcdRectEvent(const Frame &frame, quint8 expectedCommand, LcdRectEvent *event);
@@ -197,7 +189,6 @@ bool decodeLcdBitmap1Event(const Frame &frame, LcdBitmap1Event *event);
 bool decodeLcdBitmap16Event(const Frame &frame, LcdBitmap16Event *event);
 bool isLcdDeinitEvent(const Frame &frame);
 bool isPrinterEvent(const Frame &frame, quint8 expectedCommand);
-bool isPrinterPaperStatusRequest(const Frame &frame);
 bool decodePrinterEnumEvent(const Frame &frame, quint8 expectedCommand, quint8 *value);
 bool decodePrinterPrintTextEvent(const Frame &frame, PrinterPrintTextEvent *event);
 bool decodePrinterPrintBitmapEvent(const Frame &frame, PrinterPrintBitmapEvent *event);

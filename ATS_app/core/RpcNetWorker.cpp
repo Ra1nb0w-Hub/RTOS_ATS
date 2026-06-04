@@ -18,12 +18,12 @@ void RpcNetWorker::execSockRecv(int sock, unsigned int bufLen, unsigned int time
         data = recvBuf.left(received);
     }
 
-    emit sockRecvFinished(service, command, received, data);
+    emit sockRecvFinished(service, command, sock, received, data);
 }
 
 void RpcNetWorker::execSockConnect(int sock, const QByteArray &host, quint16 port,
                                     unsigned int timeoutMs, quint8 service, quint8 command)
 {
     int ret = ats_sock_connect(sock, host.constData(), port, timeoutMs);
-    emit sockConnectFinished(service, command, ret);
+    emit sockConnectFinished(service, command, sock, ret);
 }

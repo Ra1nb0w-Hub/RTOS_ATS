@@ -519,7 +519,7 @@ static const unsigned char font_12x24[] = {
 static ats_printer_align_mode_t s_align_mode  = ATS_PRINTER_ALIGN_MODE_LEFT;
 static ats_printer_font_size_t  s_font_size   = ATS_PRINTER_FONT_SIZE_NORMAL;
 static bool                     s_paper_status = true;
-static ats_printer_close_callback_t s_close_callback = NULL;
+static ats_printer_rpc_callback_t s_rpc_callback = {0};
 
 /* 小票缓冲区（灰度图：0=白, 255=黑） */
 static unsigned char *s_receipt_buf = NULL;
@@ -861,6 +861,22 @@ static void printer_flush_pending_ops(void)
     s_pending_count = 0;
 }
 
+/**
+ * @brief 注册打印机RPC回调函数
+ *
+ * @param callback 回调函数指针
+ *
+ * @return 0:成功 <0:失败
+ */
+int ats_printer_rpc_register_callback(ats_printer_rpc_callback_t *callback)
+{
+    if (!callback)
+        return -1;
+    
+    memcpy(&s_rpc_callback, callback, sizeof(ats_printer_rpc_callback_t));
+    return 0;
+}
+
 int ats_printer_open(void)
 {
     /* 清除待打印缓冲区 */
@@ -901,17 +917,16 @@ int ats_printer_open(void)
 int ats_printer_close(void)
 {
     s_opened = 0;
-
-    /* 触发回调通知 UI 层显示小票 */
-    if (s_close_callback)
-        s_close_callback();
-
     return 0;
 }
 
 int ats_printer_start(void)
 {
     printer_flush_pending_ops();
+
+    if (s_rpc_callback.show_print_content)
+        s_rpc_callback.show_print_content();
+
     return 0;
 }
 
@@ -1111,6 +1126,10 @@ int ats_printer_set_print_bitmap(unsigned char *data, int width, int height)
 int ats_printer_set_paper_status(bool status)
 {
     s_paper_status = status;
+
+    if (s_rpc_callback.paper_status_change)
+        s_rpc_callback.paper_status_change(status);
+
     return 0;
 }
 
@@ -1124,9 +1143,4 @@ const unsigned char *ats_printer_get_receipt_buffer(int *width, int *height)
     if (width)  *width  = s_receipt_width;
     if (height) *height = s_cursor_y > 0 ? s_cursor_y : s_receipt_height;
     return s_receipt_buf;
-}
-
-void ats_printer_set_close_callback(ats_printer_close_callback_t callback)
-{
-    s_close_callback = callback;
 }

@@ -39,6 +39,22 @@ typedef struct {
     char mac[24];                       // MAC地址
 } ats_net_wifi_ap_t;
 
+typedef struct {
+    void (*net_mode_change)(ats_net_mode_t mode);
+    void (*net_status_change)(bool status);
+
+    void (*wifi_module_status_change)(bool status);
+} ats_net_rpc_callback_t;
+
+/**
+ * @brief 注册网络RPC回调函数
+ * 
+ * @param callback 回调函数指针
+ * 
+ * @return 0:成功 <0:失败
+ */
+int ats_net_rpc_register_callback(ats_net_rpc_callback_t *callback);
+
 /**
  * @brief 创建socket
  *

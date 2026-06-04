@@ -5,7 +5,6 @@ extern "C" {
 #endif
 
 #include <stddef.h>
-#include <stdbool.h>
 
 /**
  * @brief 设置音量
@@ -37,31 +36,6 @@ int ats_audio_get_volume(size_t *puiVolume);
  * @return 0:成功(已入队) <0:失败
  */
 int ats_audio_play_file(const char *pcFilePath);
-
-/**
- * @brief 初始化音频播放子系统（启动后台播放线程）
- * 
- * 通常不需要手动调用，ats_audio_play_file 会自动初始化。
- * 也可在程序启动时提前调用以避免首次播放的延迟。
- * 
- * @return 0:成功 <0:失败
- */
-int ats_audio_init(void);
-
-/**
- * @brief 关闭音频播放子系统
- *
- * 停止后台播放线程，等待当前正在播放的音频播完后退出。
- * 应在程序退出时调用。
- */
-void ats_audio_shutdown(void);
-
-/**
- * @brief 查询是否有音频正在播放
- *
- * @return true: 正在播放 false: 未播放
- */
-bool ats_audio_is_playing(void);
 
 #ifdef __cplusplus
 }

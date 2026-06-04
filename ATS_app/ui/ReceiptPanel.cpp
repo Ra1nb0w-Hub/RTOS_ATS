@@ -4,16 +4,44 @@
 #include <QPainter>
 #include <QScrollBar>
 
+ReceiptPanel *ReceiptPanel::s_instance = nullptr;
+
 ReceiptPanel::ReceiptPanel(QWidget *parent)
     : QWidget(parent)
     , m_ui(new Ui::ReceiptPanel)
 {
     m_ui->setupUi(this);
+    s_instance = this;
+
+    ats_printer_rpc_callback_t rpc_callback;
+    rpc_callback.paper_status_change = ReceiptPanel::onPaperStatusChange;
+    rpc_callback.show_print_content = ReceiptPanel::onShowPrintContent;
+
+    ats_printer_rpc_register_callback(&rpc_callback);
 }
 
 ReceiptPanel::~ReceiptPanel()
 {
     delete m_ui;
+}
+
+void ReceiptPanel::onPaperStatusChange(bool status)
+{
+    if (!s_instance) return;
+
+    emit s_instance->paperStatusChanged(status);
+}
+
+void ReceiptPanel::onShowPrintContent()
+{
+    if (!s_instance) return;
+
+    int w = 0, h = 0;
+    const unsigned char *data = ats_printer_get_receipt_buffer(&w, &h);
+    if (data && w > 0 && h > 0) {
+        s_instance->setReceiptData(QByteArray(reinterpret_cast<const char *>(data), w * h), w, h);
+        s_instance->showReceipt();
+    }
 }
 
 void ReceiptPanel::setReceiptData(const QByteArray &data, int width, int height)
@@ -25,11 +53,7 @@ void ReceiptPanel::setReceiptData(const QByteArray &data, int width, int height)
 
 void ReceiptPanel::showReceipt()
 {
-    qDebug() << "[Receipt] showReceipt called, data size:" << m_receiptData.size()
-             << "width:" << m_receiptWidth << "height:" << m_receiptHeight;
-
     if (m_receiptData.isEmpty() || m_receiptWidth <= 0 || m_receiptHeight <= 0) {
-        qDebug() << "[Receipt] No valid data, skipping";
         return;
     }
 
@@ -37,7 +61,6 @@ void ReceiptPanel::showReceipt()
         reinterpret_cast<const unsigned char *>(m_receiptData.constData()),
         m_receiptWidth, m_receiptHeight);
     if (m_receiptImage.isNull()) {
-        qDebug() << "[Receipt] grayToQImage returned null";
         return;
     }
 

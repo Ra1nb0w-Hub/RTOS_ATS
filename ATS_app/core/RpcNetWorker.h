@@ -16,6 +16,6 @@ public slots:
                           unsigned int timeoutMs, quint8 service, quint8 command);
 
 signals:
-    void sockRecvFinished(quint8 service, quint8 command, int received, QByteArray data);
-    void sockConnectFinished(quint8 service, quint8 command, int ret);
+    void sockRecvFinished(quint8 service, quint8 command, int sock, int received, QByteArray data);
+    void sockConnectFinished(quint8 service, quint8 command, int sock, int ret);
 };

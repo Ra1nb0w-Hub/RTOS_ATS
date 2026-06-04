@@ -39,6 +39,22 @@ typedef struct {
     char mac[24];                       // MAC地址
 } ats_net_wifi_ap_t;
 
+typedef struct {
+    void (*net_mode_change)(ats_net_mode_t mode);
+    void (*net_status_change)(bool status);
+
+    void (*wifi_module_status_change)(bool status);
+} ats_net_rpc_callback_t;
+
+/**
+ * @brief 注册网络RPC回调函数
+ * 
+ * @param callback 回调函数指针
+ * 
+ * @return 0:成功 <0:失败
+ */
+int ats_net_rpc_register_callback(ats_net_rpc_callback_t *callback);
+
 /**
  * @brief 创建socket
  *
@@ -111,29 +127,11 @@ int ats_net_set_mode(ats_net_mode_t mode);
 ats_net_mode_t ats_net_get_mode(void);
 
 /**
- * @brief 设置网络状态(蜂窝/WiFi均使用此接口)
- * 
- * @param status 状态 true:正常 false:异常
- * 
- * @return 0:成功 <0:失败
- */
-int ats_net_set_status(bool status);
-
-/**
  * @brief 获取网络状态(蜂窝/WiFi均使用此接口)
  * 
  * @return true:正常 false:异常
  */
 bool ats_net_get_status(void);
-
-/**
- * @brief 设置WiFi模块状态
- * 
- * @param status 状态 true:可用/存在 false:不可用/不存在
- * 
- * @return 0:成功 <0:失败
- */
-int ats_net_wifi_set_module_status(bool status);
 
 /**
  * @brief 获取WiFi模块状态
@@ -143,15 +141,6 @@ int ats_net_wifi_set_module_status(bool status);
 bool ats_net_wifi_get_module_status(void);
 
 /**
- * @brief 设置当前连接的WiFi SSID
- * 
- * @param ssid SSID
- * 
- * @return 0:成功 <0:失败
- */
-int ats_net_wifi_set_ssid(const char *ssid);
-
-/**
  * @brief 获取当前连接的WiFi SSID
  * 
  * @return SSID
@@ -159,30 +148,11 @@ int ats_net_wifi_set_ssid(const char *ssid);
 char *ats_net_wifi_get_ssid(void);
 
 /**
- * @brief 设置当前连接的WiFi信号强度
- * 
- * @param signal 信号强度
- * 
- * @return 0:成功 <0:失败
- */
-int ats_net_wifi_set_signal(int signal);
-
-/**
  * @brief 获取当前连接的WiFi信号强度
  * 
  * @return 信号强度
  */
 int ats_net_wifi_get_signal(void);
-
-/**
- * @brief 设置WiFi周围AP列表
- * 
- * @param ap_list AP列表
- * @param count AP数量
- * 
- * @return 0:成功 <0:失败
- */
-int ats_net_wifi_set_ap_list(ats_net_wifi_ap_t *ap_list, unsigned int count);
 
 /**
  * @brief 获取WiFi周围AP列表
@@ -195,29 +165,11 @@ int ats_net_wifi_set_ap_list(ats_net_wifi_ap_t *ap_list, unsigned int count);
 int ats_net_wifi_get_ap_list(ats_net_wifi_ap_t **ap_list, unsigned int *count);
 
 /**
- * @brief 设置蜂窝网络MCC
- * 
- * @param mcc 移动国家代码
- * 
- * @return 0:成功 <0:失败
- */
-int ats_net_cellular_set_mcc(int mcc);
-
-/**
  * @brief 获取蜂窝网络MCC
  * 
  * @return 移动国家代码
  */
 int ats_net_cellular_get_mcc(void);
-
-/**
- * @brief 设置蜂窝网络MNC
- * 
- * @param mnc 移动设备网络代码
- * 
- * @return 0:成功 <0:失败
- */
-int ats_net_cellular_set_mnc(int mnc);
 
 /**
  * @brief 获取蜂窝网络MNC
@@ -227,29 +179,11 @@ int ats_net_cellular_set_mnc(int mnc);
 int ats_net_cellular_get_mnc(void);
 
 /**
- * @brief 设置蜂窝网络LAC
- * 
- * @param lac 位置区域码
- * 
- * @return 0:成功 <0:失败
- */
-int ats_net_cellular_set_lac(int lac);
-
-/**
  * @brief 获取蜂窝网络LAC
  * 
  * @return 位置区域码
  */
 int ats_net_cellular_get_lac(void);
-
-/**
- * @brief 设置蜂窝网络CELL ID
- * 
- * @param cell_id 小区ID
- * 
- * @return 0:成功 <0:失败
- */
-int ats_net_cellular_set_cell_id(int cell_id);
 
 /**
  * @brief 获取蜂窝网络CELL ID
@@ -259,14 +193,6 @@ int ats_net_cellular_set_cell_id(int cell_id);
 int ats_net_cellular_get_cell_id(void);
 
 /**
- * @brief 设置蜂窝网络Signal
- *
- * @param signal 信号值
- * @return 0:成功 <0:失败
- */
-int ats_net_cellular_set_signal(int signal);
-
-/**
  * @brief 获取蜂窝网络Signal
  *
  * @return 信号值
@@ -274,29 +200,11 @@ int ats_net_cellular_set_signal(int signal);
 int ats_net_cellular_get_signal(void);
 
 /**
- * @brief 设置IMSI
- * 
- * @param imsi IMSI
- * 
- * @return 0:成功 <0:失败
- */
-int ats_net_cellular_set_imsi(char *imsi);
-
-/**
  * @brief 获取IMSI
  * 
  * @return IMSI
  */
 char *ats_net_cellular_get_imsi(void);
-
-/**
- * @brief 设置IMEI
- * 
- * @param imei IMEI
- * 
- * @return 0:成功 <0:失败
- */
-int ats_net_cellular_set_imei(char *imei);
 
 /**
  * @brief 获取IMEI

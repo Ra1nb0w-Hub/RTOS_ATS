@@ -17,6 +17,8 @@
 #define ATS_SERIAL_NUMBER_SIZE      32U
 #define ATS_WAIT_FOREVER_MS         0xFFFFFFFFU
 
+#define IsLeepYear(year) (((year % 400 == 0) || ((year % 4 == 0) && (year % 100 != 0))) ? true : false)
+
 typedef struct
 {
     void (*func)(void *args);
@@ -29,10 +31,12 @@ typedef struct
     void *args;
 } ats_timer_context_t;
 
+static unsigned long s_timestamp = 0UL;
+static unsigned int s_timestamp_tick = 0U;
 static ats_keypad_event_t s_keypad_event = { ATS_KEY_CODE_NONE, false };
 static uint32_t s_random_state = 0x13572468UL;
 
-static UBaseType_t ats_priority_to_freertos(ats_thread_priority_t priority)
+static UBaseType_t _priority_to_freertos(ats_thread_priority_t priority)
 {
     switch (priority)
     {
@@ -50,7 +54,7 @@ static UBaseType_t ats_priority_to_freertos(ats_thread_priority_t priority)
     }
 }
 
-static void ats_thread_entry(void *args)
+static void _thread_entry(void *args)
 {
     ats_thread_context_t *context = (ats_thread_context_t *)args;
     void (*func)(void *args_value) = NULL;
@@ -60,7 +64,7 @@ static void ats_thread_entry(void *args)
     {
         func = context->func;
         func_args = context->args;
-        vPortFree(context);
+        ats_free(context);
     }
 
     if (func != NULL)
@@ -69,6 +73,117 @@ static void ats_thread_entry(void *args)
     }
 
     vTaskDelete(NULL);
+}
+
+static void _timer_entry(TimerHandle_t xTimer)
+{
+    ats_timer_context_t *context = (ats_timer_context_t *)pvTimerGetTimerID(xTimer);
+
+    if (context != NULL)
+    {
+        if (context->callback != NULL)
+        {
+            context->callback(context->args);
+        }
+    }
+}
+
+static void _TimestampConvertDateTime(unsigned long ulTimestamp, ats_datetime_t *pstDateTime)
+{
+    unsigned int uiRemainDays = 0;
+
+    // 计算秒数
+    pstDateTime->uiSecond = ulTimestamp % 60;
+    ulTimestamp /= 60;
+
+    // 计算分钟
+    pstDateTime->uiMinute = ulTimestamp % 60;
+    ulTimestamp /= 60;
+
+    // 计算小时
+    pstDateTime->uiHour = ulTimestamp % 24;
+    ulTimestamp /= 24;
+
+    // 计算年、月、日
+    uiRemainDays = ulTimestamp;
+    pstDateTime->uiYear = 1970;
+    pstDateTime->uiMonth = 1;
+    pstDateTime->uiDay = 1;
+    while (uiRemainDays > 0)
+    {
+        unsigned int uiDaysInYear = 365;
+
+        if (IsLeepYear(pstDateTime->uiYear))
+            uiDaysInYear += 1;
+
+        if (uiRemainDays >= uiDaysInYear)
+        {
+            uiRemainDays -= uiDaysInYear;
+            pstDateTime->uiYear++;
+        }
+        else
+        {
+            unsigned int uiDaysInMonth[] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+
+            for (int i = 0; i < 12; i++)
+            {
+                // 需要考虑当前年份是否是闰年
+                if ((i == 1) && IsLeepYear(pstDateTime->uiYear))
+                    uiDaysInMonth[1] = 29;
+
+                if (uiRemainDays >= uiDaysInMonth[i])
+                {
+                    uiRemainDays -= uiDaysInMonth[i];
+                    pstDateTime->uiMonth++;
+                }
+                else
+                {
+                    pstDateTime->uiDay += uiRemainDays;
+                    break;
+                }
+            }
+            break;
+        }
+    }
+}
+
+/**
+ * @brief 日期和时间转换为时间戳
+ * 
+ * @param[in] pstDateTime 日期和时间结构体
+ * @param[in] iTimezone 时区
+ * @param[out] pulTimestamp 时间戳
+ * 
+ * @return 0:成功 <0:失败
+ */
+static void _DateTimeConvertTimestamp(ats_datetime_t *pstDateTime, int iTimezone, unsigned long *pulTimestamp)
+{
+    char cDaysInMonth[] = {0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+
+    // 计算年份偏移量
+    for (unsigned int i = 1970; i < pstDateTime->uiYear; i++)
+    {
+        if (IsLeepYear(i) == true)
+            *pulTimestamp += 366 * 24 * 60 * 60; // 闰年366天
+        else
+            *pulTimestamp += 365 * 24 * 60 * 60; // 平年365天
+    }
+
+    // 需要考虑当前年份是否是闰年
+    if (IsLeepYear(pstDateTime->uiYear))
+        cDaysInMonth[2] = 29;
+
+    // 加上月份总天数
+    for (unsigned int i = 1; i < pstDateTime->uiMonth; i++)
+        *pulTimestamp += cDaysInMonth[i] * 24 * 60 * 60;
+
+    // 加上日期天数
+    *pulTimestamp += (pstDateTime->uiDay - 1) * 24 * 60 * 60;
+
+    // 加上时间
+    *pulTimestamp += (pstDateTime->uiHour + iTimezone) * 60 * 60;
+    *pulTimestamp += pstDateTime->uiMinute * 60;
+    *pulTimestamp += pstDateTime->uiSecond;
 }
 
 void *ats_malloc(unsigned int size)
@@ -155,7 +270,7 @@ int ats_thread_create(ats_thread_handle_t *handle, const char *name,
         return ATS_EC_INVALID_PARAM;
     }
 
-    context = (ats_thread_context_t *)pvPortMalloc(sizeof(*context));
+    context = (ats_thread_context_t *)ats_malloc(sizeof(*context));
     if (context == NULL)
     {
         return ATS_EC_INVALID_PARAM;
@@ -164,14 +279,14 @@ int ats_thread_create(ats_thread_handle_t *handle, const char *name,
     context->func = func;
     context->args = args;
 
-    if (xTaskCreate(ats_thread_entry,
+    if (xTaskCreate(_thread_entry,
                     task_name,
                     stack_words,
                     context,
-                    ats_priority_to_freertos(priority),
+                    _priority_to_freertos(priority),
                     &task_handle) != pdPASS)
     {
-        vPortFree(context);
+        ats_free(context);
         return ATS_EC_INVALID_PARAM;
     }
 
@@ -219,7 +334,7 @@ int ats_thread_info(char *buffer, size_t buffer_size)
         return ATS_EC_OK;
     }
 
-    task_status = (TaskStatus_t *)pvPortMalloc(task_count * sizeof(TaskStatus_t));
+    task_status = (TaskStatus_t *)ats_malloc(task_count * sizeof(TaskStatus_t));
     if (task_status == NULL)
     {
         return ATS_EC_INVALID_PARAM;
@@ -242,14 +357,14 @@ int ats_thread_info(char *buffer, size_t buffer_size)
 
         if ((written < 0) || ((size_t)written >= buffer_size - offset))
         {
-            vPortFree(task_status);
+            ats_free(task_status);
             return ATS_EC_INVALID_PARAM;
         }
 
         offset += (size_t)written;
     }
 
-    vPortFree(task_status);
+    ats_free(task_status);
 
     return ATS_EC_OK;
 }
@@ -341,111 +456,20 @@ int ats_semaphore_post(ats_semaphore_handle_t *handle)
     return (xSemaphoreGive((SemaphoreHandle_t)(*handle)) == pdTRUE) ? ATS_EC_OK : ATS_EC_INVALID_PARAM;
 }
 
-static int datetime_encode(const ats_datetime_t *dt, uint8_t *buf)
-{
-    buf[0] = (uint8_t)(dt->uiYear & 0xFFU);
-    buf[1] = (uint8_t)((dt->uiYear >> 8) & 0xFFU);
-    buf[2] = (uint8_t)dt->uiMonth;
-    buf[3] = (uint8_t)dt->uiDay;
-    buf[4] = (uint8_t)dt->uiHour;
-    buf[5] = (uint8_t)dt->uiMinute;
-    buf[6] = (uint8_t)dt->uiSecond;
-    return ATS_EC_OK;
-}
-
-static int datetime_decode(ats_datetime_t *dt, const uint8_t *buf, uint16_t len)
-{
-    if (len < 7U)
-    {
-        return ATS_EC_INVALID_PARAM;
-    }
-
-    dt->uiYear   = (unsigned int)buf[0] | ((unsigned int)buf[1] << 8);
-    dt->uiMonth  = (unsigned int)buf[2];
-    dt->uiDay    = (unsigned int)buf[3];
-    dt->uiHour   = (unsigned int)buf[4];
-    dt->uiMinute = (unsigned int)buf[5];
-    dt->uiSecond = (unsigned int)buf[6];
-    return ATS_EC_OK;
-}
-
 int ats_datetime_get(ats_datetime_t *datetime)
 {
-    uint8_t resp_buf[4U + 7U];
-    uint16_t resp_len = sizeof(resp_buf);
-    int status;
-
-    if (datetime == NULL)
-    {
-        return ATS_EC_INVALID_PARAM;
-    }
-
-    status = ats_rpc_request(ATS_RPC_SERVICE_CORE,
-                             ATS_RPC_CORE_GET_DATETIME,
-                             NULL, 0U,
-                             resp_buf, &resp_len,
-                             2000U);
-    if (status != ATS_EC_OK)
-    {
-        return status;
-    }
-
-    if (resp_len < 4U)
-    {
-        return ATS_EC_INVALID_PARAM;
-    }
-
-    {
-        int32_t ret = (int32_t)((uint32_t)resp_buf[0]
-                     | ((uint32_t)resp_buf[1] << 8)
-                     | ((uint32_t)resp_buf[2] << 16)
-                     | ((uint32_t)resp_buf[3] << 24));
-        if (ret != 0)
-        {
-            return ret;
-        }
-    }
-
-    if (resp_len < (4U + 7U))
-    {
-        return ATS_EC_INVALID_PARAM;
-    }
-
-    return datetime_decode(datetime, &resp_buf[4], (uint16_t)(resp_len - 4U));
+    _TimestampConvertDateTime(ats_timestamp_get(), datetime);
+    return ATS_EC_OK;
 }
 
 int ats_datetime_set(ats_datetime_t *datetime)
 {
-    uint8_t req_buf[7];
-    uint8_t resp_buf[4];
-    uint16_t resp_len = sizeof(resp_buf);
+    unsigned long ulTimestamp = 0U;
 
-    if (datetime == NULL)
-    {
-        return ATS_EC_INVALID_PARAM;
-    }
-
-    (void)datetime_encode(datetime, req_buf);
-
-    const int status = ats_rpc_request(ATS_RPC_SERVICE_CORE,
-                                       ATS_RPC_CORE_SET_DATETIME,
-                                       req_buf, sizeof(req_buf),
-                                       resp_buf, &resp_len,
-                                       2000U);
-    if (status != ATS_EC_OK)
-    {
-        return status;
-    }
-
-    if (resp_len < 4U)
-    {
-        return ATS_EC_INVALID_PARAM;
-    }
-
-    return (int32_t)((uint32_t)resp_buf[0]
-                   | ((uint32_t)resp_buf[1] << 8)
-                   | ((uint32_t)resp_buf[2] << 16)
-                   | ((uint32_t)resp_buf[3] << 24));
+    _DateTimeConvertTimestamp(datetime, 0, &ulTimestamp);
+    s_timestamp = ulTimestamp;
+    s_timestamp_tick = ats_tick_get();
+    return ATS_EC_OK;
 }
 
 unsigned long ats_timestamp_get(void)
@@ -453,7 +477,9 @@ unsigned long ats_timestamp_get(void)
     uint8_t resp_buf[4];
     uint16_t resp_len = sizeof(resp_buf);
     int status;
-    uint32_t timestamp;
+
+    if (s_timestamp)
+        return s_timestamp + ((ats_tick_get() - s_timestamp_tick) / 1000U);
 
     status = ats_rpc_request(ATS_RPC_SERVICE_CORE,
                              ATS_RPC_CORE_GET_TIMESTAMP,
@@ -461,16 +487,11 @@ unsigned long ats_timestamp_get(void)
                              resp_buf, &resp_len,
                              2000U);
     if ((status != ATS_EC_OK) || (resp_len < 4U))
-    {
-        return 0UL;
-    }
+        return s_timestamp;
 
-    timestamp = (uint32_t)resp_buf[0]
-              | ((uint32_t)resp_buf[1] << 8)
-              | ((uint32_t)resp_buf[2] << 16)
-              | ((uint32_t)resp_buf[3] << 24);
-
-    return (unsigned long)timestamp;
+    s_timestamp = (unsigned long)ats_rpc_read_u32_le(resp_buf);
+    s_timestamp_tick = ats_tick_get();
+    return s_timestamp;
 }
 
 unsigned int ats_tick_get(void)
@@ -531,19 +552,6 @@ char *ats_serial_number_get(void)
     return s_sn;
 }
 
-static void ats_timer_entry(TimerHandle_t xTimer)
-{
-    ats_timer_context_t *context = (ats_timer_context_t *)pvTimerGetTimerID(xTimer);
-
-    if (context != NULL)
-    {
-        if (context->callback != NULL)
-        {
-            context->callback(context->args);
-        }
-    }
-}
-
 int ats_timer_create(ats_timer_handle_t *handle, const char *name,
                      ats_timer_type_t type, unsigned int period_ms,
                      void (*callback)(void *args), void *args)
@@ -558,7 +566,7 @@ int ats_timer_create(ats_timer_handle_t *handle, const char *name,
         return ATS_EC_INVALID_PARAM;
     }
 
-    context = (ats_timer_context_t *)pvPortMalloc(sizeof(*context));
+    context = (ats_timer_context_t *)ats_malloc(sizeof(*context));
     if (context == NULL)
     {
         return ATS_EC_INVALID_PARAM;
@@ -571,10 +579,10 @@ int ats_timer_create(ats_timer_handle_t *handle, const char *name,
                          pdMS_TO_TICKS(period_ms),
                          auto_reload,
                          (void *)context,
-                         ats_timer_entry);
+                         _timer_entry);
     if (timer == NULL)
     {
-        vPortFree(context);
+        ats_free(context);
         return ATS_EC_INVALID_PARAM;
     }
 
@@ -630,19 +638,19 @@ int ats_timer_delete(ats_timer_handle_t *handle)
 
     if (context != NULL)
     {
-        vPortFree(context);
+        ats_free(context);
     }
 
     *handle = NULL;
     return ATS_EC_OK;
 }
 
-int ats_timer_is_running(ats_timer_handle_t *handle)
+bool ats_timer_is_running(ats_timer_handle_t *handle)
 {
     if ((handle == NULL) || (*handle == NULL))
     {
-        return 0;
+        return false;
     }
 
-    return (xTimerIsTimerActive((TimerHandle_t)(*handle)) != pdFALSE) ? 1 : 0;
+    return (xTimerIsTimerActive((TimerHandle_t)(*handle)) != pdFALSE) ? true : false;
 }

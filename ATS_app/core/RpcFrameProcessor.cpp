@@ -38,6 +38,13 @@ static QByteArray buildInt32Response(qint32 value)
     return payload;
 }
 
+static QByteArray buildBoolResponse(bool value)
+{
+    QByteArray payload(1, '\0');
+    payload[0] = static_cast<char>(value ? 1 : 0);
+    return payload;
+}
+
 RpcFrameProcessor::RpcFrameProcessor(RpcSerialServer *server)
     : QObject(nullptr), m_server(server)
 {
@@ -117,22 +124,37 @@ void RpcFrameProcessor::postCrash(const QString &msg)
         Qt::QueuedConnection, Q_ARG(QString, msg));
 }
 
-void RpcFrameProcessor::onSockRecvFinished(quint8 service, quint8 command, int received, QByteArray data)
+void RpcFrameProcessor::onSockRecvFinished(quint8 service, quint8 command, int sock, int received, QByteArray data)
 {
-    QByteArray respPayload(4, '\0');
-    respPayload[0] = static_cast<char>(received & 0xFF);
-    respPayload[1] = static_cast<char>((received >> 8) & 0xFF);
-    respPayload[2] = static_cast<char>((received >> 16) & 0xFF);
-    respPayload[3] = static_cast<char>((received >> 24) & 0xFF);
+    QByteArray respPayload;
+    /* 前 4 字节: sock 句柄 (用于 Target 端 match_key 匹配) */
+    respPayload.append(static_cast<char>(sock & 0xFF));
+    respPayload.append(static_cast<char>((sock >> 8) & 0xFF));
+    respPayload.append(static_cast<char>((sock >> 16) & 0xFF));
+    respPayload.append(static_cast<char>((sock >> 24) & 0xFF));
+    respPayload.append(static_cast<char>(received & 0xFF));
+    respPayload.append(static_cast<char>((received >> 8) & 0xFF));
+    respPayload.append(static_cast<char>((received >> 16) & 0xFF));
+    respPayload.append(static_cast<char>((received >> 24) & 0xFF));
     if (received > 0) {
         respPayload.append(data);
     }
     sendResponse(service, command, respPayload);
 }
 
-void RpcFrameProcessor::onSockConnectFinished(quint8 service, quint8 command, int ret)
+void RpcFrameProcessor::onSockConnectFinished(quint8 service, quint8 command, int sock, int ret)
 {
-    sendResponse(service, command, buildInt32Response(static_cast<qint32>(ret)));
+    /* 前 4 字节: sock 句柄 (用于 Target 端 match_key 匹配) */
+    QByteArray payload;
+    payload.append(static_cast<char>(sock & 0xFF));
+    payload.append(static_cast<char>((sock >> 8) & 0xFF));
+    payload.append(static_cast<char>((sock >> 16) & 0xFF));
+    payload.append(static_cast<char>((sock >> 24) & 0xFF));
+    payload.append(static_cast<char>(ret & 0xFF));
+    payload.append(static_cast<char>((ret >> 8) & 0xFF));
+    payload.append(static_cast<char>((ret >> 16) & 0xFF));
+    payload.append(static_cast<char>((ret >> 24) & 0xFF));
+    sendResponse(service, command, payload);
 }
 
 void RpcFrameProcessor::sendResponse(quint8 service, quint8 command, const QByteArray &payload)
@@ -143,6 +165,16 @@ void RpcFrameProcessor::sendResponse(quint8 service, quint8 command, const QByte
 void RpcFrameProcessor::sendResponse(quint8 service, quint8 command)
 {
     postResponse(RpcProtocol::buildResponseFrame(service, command));
+}
+
+void RpcFrameProcessor::sendEvent(quint8 service, quint8 command, const QByteArray &payload)
+{
+    postResponse(RpcProtocol::buildEventFrame(service, command, payload));
+}
+
+void RpcFrameProcessor::sendEvent(quint8 service, quint8 command)
+{
+    postResponse(RpcProtocol::buildEventFrame(service, command));
 }
 
 void RpcFrameProcessor::handleCoreFrame(const RpcProtocol::Frame &frame)
@@ -234,44 +266,6 @@ void RpcFrameProcessor::handleCoreFrame(const RpcProtocol::Frame &frame)
     if (frame.frameType != RpcProtocol::kFrameTypeRequest)
         return;
 
-    if (RpcProtocol::isCoreRequest(frame, RpcProtocol::kCoreCommandGetDateTime)) {
-        ats_datetime_t dt;
-        int ret = ats_datetime_get(&dt);
-        if (ret != 0) {
-            sendResponse(RpcProtocol::kServiceCore, RpcProtocol::kCoreCommandGetDateTime,
-                         buildInt32Response(static_cast<qint32>(ret)));
-            return;
-        }
-
-        QByteArray respPayload = buildInt32Response(static_cast<qint32>(ret));
-        respPayload.append(static_cast<char>(dt.uiYear & 0xFF));
-        respPayload.append(static_cast<char>((dt.uiYear >> 8) & 0xFF));
-        respPayload.append(static_cast<char>(dt.uiMonth));
-        respPayload.append(static_cast<char>(dt.uiDay));
-        respPayload.append(static_cast<char>(dt.uiHour));
-        respPayload.append(static_cast<char>(dt.uiMinute));
-        respPayload.append(static_cast<char>(dt.uiSecond));
-        sendResponse(RpcProtocol::kServiceCore, RpcProtocol::kCoreCommandGetDateTime, respPayload);
-        return;
-    }
-
-    if (RpcProtocol::isCoreRequest(frame, RpcProtocol::kCoreCommandSetDateTime)) {
-        RpcProtocol::DateTime dt;
-        if (RpcProtocol::decodeCoreDateTimeRequest(frame, &dt)) {
-            ats_datetime_t atsDt;
-            atsDt.uiYear   = dt.year;
-            atsDt.uiMonth  = dt.month;
-            atsDt.uiDay    = dt.day;
-            atsDt.uiHour   = dt.hour;
-            atsDt.uiMinute = dt.minute;
-            atsDt.uiSecond = dt.second;
-            int ret = ats_datetime_set(&atsDt);
-            sendResponse(RpcProtocol::kServiceCore, RpcProtocol::kCoreCommandSetDateTime,
-                         buildInt32Response(static_cast<qint32>(ret)));
-        }
-        return;
-    }
-
     if (RpcProtocol::isCoreRequest(frame, RpcProtocol::kCoreCommandGetTimestamp)) {
         unsigned long ts = ats_timestamp_get();
         quint32 val = static_cast<quint32>(ts);
@@ -354,8 +348,6 @@ void RpcFrameProcessor::handleLcdFrame(const RpcProtocol::Frame &frame)
 
 void RpcFrameProcessor::handlePrinterFrame(const RpcProtocol::Frame &frame)
 {
-    quint8 enumValue = 0;
-
     if (RpcProtocol::isPrinterEvent(frame, RpcProtocol::kPrinterCommandOpen)) {
         if (ats_printer_open() != 0) {
             LogManager::logWarn("Printer open event processing failed");
@@ -370,22 +362,17 @@ void RpcFrameProcessor::handlePrinterFrame(const RpcProtocol::Frame &frame)
         return;
     }
 
-    if (RpcProtocol::decodePrinterEnumEvent(frame, RpcProtocol::kPrinterCommandSetAlign, &enumValue)) {
-        if (ats_printer_set_align_mode(static_cast<ats_printer_align_mode_t>(enumValue)) != 0) {
-            LogManager::logWarn("Printer align event processing failed");
-        }
-        return;
-    }
-
-    if (RpcProtocol::decodePrinterEnumEvent(frame, RpcProtocol::kPrinterCommandSetFontSize, &enumValue)) {
-        if (ats_printer_set_font_size(static_cast<ats_printer_font_size_t>(enumValue)) != 0) {
-            LogManager::logWarn("Printer font event processing failed");
+    if (RpcProtocol::isPrinterEvent(frame, RpcProtocol::kPrinterCommandStart)) {
+        if (ats_printer_start() != 0) {
+            LogManager::logWarn("Printer start event processing failed");
         }
         return;
     }
 
     RpcProtocol::PrinterPrintTextEvent textEvent;
     if (RpcProtocol::decodePrinterPrintTextEvent(frame, &textEvent)) {
+        ats_printer_set_align_mode((ats_printer_align_mode_t)textEvent.alignMode);
+        ats_printer_set_font_size((ats_printer_font_size_t)textEvent.fontSize);
         QByteArray text = textEvent.text;
         text.append('\0');
         if (ats_printer_set_print_data(text.data(), textEvent.isEndOfLine) != 0) {
@@ -396,25 +383,13 @@ void RpcFrameProcessor::handlePrinterFrame(const RpcProtocol::Frame &frame)
 
     RpcProtocol::PrinterPrintBitmapEvent bitmapEvent;
     if (RpcProtocol::decodePrinterPrintBitmapEvent(frame, &bitmapEvent)) {
+        ats_printer_set_align_mode((ats_printer_align_mode_t)bitmapEvent.alignMode);
         if (ats_printer_set_print_bitmap(reinterpret_cast<unsigned char *>(bitmapEvent.bitmapData.data()),
                                          bitmapEvent.width,
                                          bitmapEvent.height) != 0) {
             LogManager::logWarn("Printer bitmap event processing failed");
         }
         return;
-    }
-
-    if (RpcProtocol::decodePrinterEnumEvent(frame, RpcProtocol::kPrinterCommandSetPaperStatus, &enumValue)) {
-        if (ats_printer_set_paper_status(enumValue != 0U) != 0) {
-            LogManager::logWarn("Printer paper-status event processing failed");
-        }
-        return;
-    }
-
-    if (RpcProtocol::isPrinterPaperStatusRequest(frame)) {
-        QByteArray payload;
-        payload.append(ats_printer_get_paper_status() ? '\x01' : '\x00');
-        sendResponse(RpcProtocol::kServicePrinter, RpcProtocol::kPrinterCommandGetPaperStatus, payload);
     }
 }
 
@@ -662,56 +637,6 @@ void RpcFrameProcessor::handleNetFrame(const RpcProtocol::Frame &frame)
         return;
     }
 
-    if (RpcProtocol::isNetRequest(frame, RpcProtocol::kNetCommandGetMode)) {
-        qint32 mode = static_cast<qint32>(ats_net_get_mode());
-        sendResponse(RpcProtocol::kServiceNet, RpcProtocol::kNetCommandGetMode,
-                     buildInt32Response(mode));
-        return;
-    }
-
-    if (RpcProtocol::isNetRequest(frame, RpcProtocol::kNetCommandSetStatus)) {
-        if (p.size() < 1) return;
-        int ret = ats_net_set_status(data[0] != 0);
-        sendResponse(RpcProtocol::kServiceNet, RpcProtocol::kNetCommandSetStatus,
-                     buildInt32Response(static_cast<qint32>(ret)));
-        return;
-    }
-
-    if (RpcProtocol::isNetRequest(frame, RpcProtocol::kNetCommandGetStatus)) {
-        bool status = ats_net_get_status();
-        QByteArray respPayload;
-        respPayload.append(status ? '\x01' : '\x00');
-        sendResponse(RpcProtocol::kServiceNet, RpcProtocol::kNetCommandGetStatus, respPayload);
-        return;
-    }
-
-    if (RpcProtocol::isNetRequest(frame, RpcProtocol::kNetCommandWifiSetModuleStatus)) {
-        if (p.size() < 1) return;
-        int ret = ats_net_wifi_set_module_status(data[0] != 0);
-        sendResponse(RpcProtocol::kServiceNet, RpcProtocol::kNetCommandWifiSetModuleStatus,
-                     buildInt32Response(static_cast<qint32>(ret)));
-        return;
-    }
-
-    if (RpcProtocol::isNetRequest(frame, RpcProtocol::kNetCommandWifiGetModuleStatus)) {
-        bool status = ats_net_wifi_get_module_status();
-        QByteArray respPayload;
-        respPayload.append(status ? '\x01' : '\x00');
-        sendResponse(RpcProtocol::kServiceNet, RpcProtocol::kNetCommandWifiGetModuleStatus, respPayload);
-        return;
-    }
-
-    if (RpcProtocol::isNetRequest(frame, RpcProtocol::kNetCommandWifiSetSsid)) {
-        if (p.size() < 2) return;
-        const quint8 ssidLen = static_cast<quint8>(data[0]);
-        if (p.size() < 1 + ssidLen) return;
-        const QByteArray ssid = p.mid(1, ssidLen);
-        int ret = ats_net_wifi_set_ssid(ssid.constData());
-        sendResponse(RpcProtocol::kServiceNet, RpcProtocol::kNetCommandWifiSetSsid,
-                     buildInt32Response(static_cast<qint32>(ret)));
-        return;
-    }
-
     if (RpcProtocol::isNetRequest(frame, RpcProtocol::kNetCommandWifiGetSsid)) {
         char *ssid = ats_net_wifi_get_ssid();
         QByteArray respPayload;
@@ -722,44 +647,10 @@ void RpcFrameProcessor::handleNetFrame(const RpcProtocol::Frame &frame)
         return;
     }
 
-    if (RpcProtocol::isNetRequest(frame, RpcProtocol::kNetCommandWifiSetSignal)) {
-        if (p.size() < 4) return;
-        int ret = ats_net_wifi_set_signal(static_cast<int>(readInt32Le(data, 0)));
-        sendResponse(RpcProtocol::kServiceNet, RpcProtocol::kNetCommandWifiSetSignal,
-                     buildInt32Response(static_cast<qint32>(ret)));
-        return;
-    }
-
     if (RpcProtocol::isNetRequest(frame, RpcProtocol::kNetCommandWifiGetSignal)) {
         int signal = ats_net_wifi_get_signal();
         sendResponse(RpcProtocol::kServiceNet, RpcProtocol::kNetCommandWifiGetSignal,
                      buildInt32Response(static_cast<qint32>(signal)));
-        return;
-    }
-
-    if (RpcProtocol::isNetRequest(frame, RpcProtocol::kNetCommandWifiSetApList)) {
-        if (p.size() < 2) return;
-        const quint16 count = static_cast<quint16>(
-            static_cast<quint8>(data[0]) | (static_cast<quint32>(static_cast<quint8>(data[1])) << 8));
-        const int expectedSize = 2 + static_cast<int>(count) * 92;
-        if (count > 0 && p.size() < expectedSize) return;
-
-        QVector<ats_net_wifi_ap_t> apList;
-        for (quint16 i = 0; i < count; ++i) {
-            ats_net_wifi_ap_t ap;
-            memset(&ap, 0, sizeof(ap));
-            const int off = 2 + static_cast<int>(i) * 92;
-            memcpy(ap.ssid, data + off, 64);
-            ap.ssid[63] = '\0';
-            ap.rssi = readInt32Le(data, off + 64);
-            memcpy(ap.mac, data + off + 68, 24);
-            ap.mac[23] = '\0';
-            apList.append(ap);
-        }
-        int ret = ats_net_wifi_set_ap_list(apList.data(),
-                                            static_cast<unsigned int>(count));
-        sendResponse(RpcProtocol::kServiceNet, RpcProtocol::kNetCommandWifiSetApList,
-                     buildInt32Response(static_cast<qint32>(ret)));
         return;
     }
 
@@ -797,26 +688,10 @@ void RpcFrameProcessor::handleNetFrame(const RpcProtocol::Frame &frame)
         }
     }
 
-    if (RpcProtocol::isNetRequest(frame, RpcProtocol::kNetCommandCellularSetMcc)) {
-        if (p.size() < 4) return;
-        int ret = ats_net_cellular_set_mcc(static_cast<int>(readInt32Le(data, 0)));
-        sendResponse(RpcProtocol::kServiceNet, RpcProtocol::kNetCommandCellularSetMcc,
-                     buildInt32Response(static_cast<qint32>(ret)));
-        return;
-    }
-
     if (RpcProtocol::isNetRequest(frame, RpcProtocol::kNetCommandCellularGetMcc)) {
         int val = ats_net_cellular_get_mcc();
         sendResponse(RpcProtocol::kServiceNet, RpcProtocol::kNetCommandCellularGetMcc,
                      buildInt32Response(static_cast<qint32>(val)));
-        return;
-    }
-
-    if (RpcProtocol::isNetRequest(frame, RpcProtocol::kNetCommandCellularSetMnc)) {
-        if (p.size() < 4) return;
-        int ret = ats_net_cellular_set_mnc(static_cast<int>(readInt32Le(data, 0)));
-        sendResponse(RpcProtocol::kServiceNet, RpcProtocol::kNetCommandCellularSetMnc,
-                     buildInt32Response(static_cast<qint32>(ret)));
         return;
     }
 
@@ -827,26 +702,10 @@ void RpcFrameProcessor::handleNetFrame(const RpcProtocol::Frame &frame)
         return;
     }
 
-    if (RpcProtocol::isNetRequest(frame, RpcProtocol::kNetCommandCellularSetLac)) {
-        if (p.size() < 4) return;
-        int ret = ats_net_cellular_set_lac(static_cast<int>(readInt32Le(data, 0)));
-        sendResponse(RpcProtocol::kServiceNet, RpcProtocol::kNetCommandCellularSetLac,
-                     buildInt32Response(static_cast<qint32>(ret)));
-        return;
-    }
-
     if (RpcProtocol::isNetRequest(frame, RpcProtocol::kNetCommandCellularGetLac)) {
         int val = ats_net_cellular_get_lac();
         sendResponse(RpcProtocol::kServiceNet, RpcProtocol::kNetCommandCellularGetLac,
                      buildInt32Response(static_cast<qint32>(val)));
-        return;
-    }
-
-    if (RpcProtocol::isNetRequest(frame, RpcProtocol::kNetCommandCellularSetCellId)) {
-        if (p.size() < 4) return;
-        int ret = ats_net_cellular_set_cell_id(static_cast<int>(readInt32Le(data, 0)));
-        sendResponse(RpcProtocol::kServiceNet, RpcProtocol::kNetCommandCellularSetCellId,
-                     buildInt32Response(static_cast<qint32>(ret)));
         return;
     }
 
@@ -857,29 +716,10 @@ void RpcFrameProcessor::handleNetFrame(const RpcProtocol::Frame &frame)
         return;
     }
 
-    if (RpcProtocol::isNetRequest(frame, RpcProtocol::kNetCommandCellularSetSignal)) {
-        if (p.size() < 4) return;
-        int ret = ats_net_cellular_set_signal(static_cast<int>(readInt32Le(data, 0)));
-        sendResponse(RpcProtocol::kServiceNet, RpcProtocol::kNetCommandCellularSetSignal,
-                     buildInt32Response(static_cast<qint32>(ret)));
-        return;
-    }
-
     if (RpcProtocol::isNetRequest(frame, RpcProtocol::kNetCommandCellularGetSignal)) {
         int val = ats_net_cellular_get_signal();
         sendResponse(RpcProtocol::kServiceNet, RpcProtocol::kNetCommandCellularGetSignal,
                      buildInt32Response(static_cast<qint32>(val)));
-        return;
-    }
-
-    if (RpcProtocol::isNetRequest(frame, RpcProtocol::kNetCommandCellularSetImsi)) {
-        if (p.size() < 2) return;
-        const quint8 len = static_cast<quint8>(data[0]);
-        if (p.size() < 1 + len) return;
-        const QByteArray val = p.mid(1, len);
-        int ret = ats_net_cellular_set_imsi(val.data());
-        sendResponse(RpcProtocol::kServiceNet, RpcProtocol::kNetCommandCellularSetImsi,
-                     buildInt32Response(static_cast<qint32>(ret)));
         return;
     }
 
@@ -890,17 +730,6 @@ void RpcFrameProcessor::handleNetFrame(const RpcProtocol::Frame &frame)
             respPayload = QByteArray(imsi, static_cast<int>(strlen(imsi)));
         }
         sendResponse(RpcProtocol::kServiceNet, RpcProtocol::kNetCommandCellularGetImsi, respPayload);
-        return;
-    }
-
-    if (RpcProtocol::isNetRequest(frame, RpcProtocol::kNetCommandCellularSetImei)) {
-        if (p.size() < 2) return;
-        const quint8 len = static_cast<quint8>(data[0]);
-        if (p.size() < 1 + len) return;
-        const QByteArray val = p.mid(1, len);
-        int ret = ats_net_cellular_set_imei(val.data());
-        sendResponse(RpcProtocol::kServiceNet, RpcProtocol::kNetCommandCellularSetImei,
-                     buildInt32Response(static_cast<qint32>(ret)));
         return;
     }
 
@@ -957,27 +786,6 @@ void RpcFrameProcessor::handleAudioFrame(const RpcProtocol::Frame &frame)
         int ret = ats_audio_play_file(path.constData());
         sendResponse(RpcProtocol::kServiceAudio, RpcProtocol::kAudioCommandPlayFile,
                      buildInt32Response(static_cast<qint32>(ret)));
-        return;
-    }
-
-    if (RpcProtocol::isAudioRequest(frame, RpcProtocol::kAudioCommandInit)) {
-        int ret = ats_audio_init();
-        sendResponse(RpcProtocol::kServiceAudio, RpcProtocol::kAudioCommandInit,
-                     buildInt32Response(static_cast<qint32>(ret)));
-        return;
-    }
-
-    if (RpcProtocol::isAudioRequest(frame, RpcProtocol::kAudioCommandShutdown)) {
-        ats_audio_shutdown();
-        sendResponse(RpcProtocol::kServiceAudio, RpcProtocol::kAudioCommandShutdown);
-        return;
-    }
-
-    if (RpcProtocol::isAudioRequest(frame, RpcProtocol::kAudioCommandIsPlaying)) {
-        bool playing = ats_audio_is_playing();
-        QByteArray respPayload;
-        respPayload.append(playing ? '\x01' : '\x00');
-        sendResponse(RpcProtocol::kServiceAudio, RpcProtocol::kAudioCommandIsPlaying, respPayload);
         return;
     }
 }
@@ -1187,4 +995,9 @@ void RpcFrameProcessor::handleReaderFrame(const RpcProtocol::Frame &frame)
                      buildInt32Response(static_cast<qint32>(ret)));
         return;
     }
+}
+
+void RpcFrameProcessor::onReportPaperStatus(bool status)
+{
+    sendEvent(RpcProtocol::kServicePrinter, RpcProtocol::kPrinterCommandSetPaperStatus, buildBoolResponse(status));
 }

@@ -36,11 +36,9 @@ typedef enum
 {
     ATS_RPC_CORE_WRITE_LOG = 1,
     ATS_RPC_CORE_CRASH = 2,
-    ATS_RPC_CORE_SET_DATETIME = 3,
-    ATS_RPC_CORE_GET_DATETIME = 4,
-    ATS_RPC_CORE_GET_TIMESTAMP = 5,
-    ATS_RPC_CORE_GET_SERIAL_NUMBER = 6,
-    ATS_RPC_CORE_GET_THREAD_INFO = 7
+    ATS_RPC_CORE_GET_TIMESTAMP = 3,
+    ATS_RPC_CORE_GET_SERIAL_NUMBER = 4,
+    ATS_RPC_CORE_GET_THREAD_INFO = 5
 } ats_rpc_core_command_t;
 
 typedef enum
@@ -57,12 +55,10 @@ typedef enum
 {
     ATS_RPC_PRINTER_CMD_OPEN = 1,
     ATS_RPC_PRINTER_CMD_CLOSE = 2,
-    ATS_RPC_PRINTER_CMD_SET_ALIGN = 3,
-    ATS_RPC_PRINTER_CMD_SET_FONT_SIZE = 4,
-    ATS_RPC_PRINTER_CMD_PRINT_TEXT = 5,
-    ATS_RPC_PRINTER_CMD_PRINT_BITMAP = 6,
-    ATS_RPC_PRINTER_CMD_SET_PAPER_STATUS = 7,
-    ATS_RPC_PRINTER_CMD_GET_PAPER_STATUS = 8
+    ATS_RPC_PRINTER_CMD_START = 3,
+    ATS_RPC_PRINTER_CMD_PRINT_TEXT = 4,
+    ATS_RPC_PRINTER_CMD_PRINT_BITMAP = 5,
+    ATS_RPC_PRINTER_CMD_SET_PAPER_STATUS = 6
 } ats_rpc_printer_command_t;
 
 typedef enum
@@ -85,41 +81,25 @@ typedef enum
     ATS_RPC_NET_CMD_SOCK_RECV = 4,
     ATS_RPC_NET_CMD_SOCK_CLOSE = 5,
     ATS_RPC_NET_CMD_SET_MODE = 6,
-    ATS_RPC_NET_CMD_GET_MODE = 7,
-    ATS_RPC_NET_CMD_SET_STATUS = 8,
-    ATS_RPC_NET_CMD_GET_STATUS = 9,
-    ATS_RPC_NET_CMD_WIFI_SET_MODULE_STATUS = 10,
-    ATS_RPC_NET_CMD_WIFI_GET_MODULE_STATUS = 11,
-    ATS_RPC_NET_CMD_WIFI_SET_SSID = 12,
-    ATS_RPC_NET_CMD_WIFI_GET_SSID = 13,
-    ATS_RPC_NET_CMD_WIFI_SET_SIGNAL = 14,
-    ATS_RPC_NET_CMD_WIFI_GET_SIGNAL = 15,
-    ATS_RPC_NET_CMD_WIFI_SET_AP_LIST = 16,
-    ATS_RPC_NET_CMD_WIFI_GET_AP_LIST = 17,
-    ATS_RPC_NET_CMD_CELLULAR_SET_MCC = 18,
-    ATS_RPC_NET_CMD_CELLULAR_GET_MCC = 19,
-    ATS_RPC_NET_CMD_CELLULAR_SET_MNC = 20,
-    ATS_RPC_NET_CMD_CELLULAR_GET_MNC = 21,
-    ATS_RPC_NET_CMD_CELLULAR_SET_LAC = 22,
-    ATS_RPC_NET_CMD_CELLULAR_GET_LAC = 23,
-    ATS_RPC_NET_CMD_CELLULAR_SET_CELL_ID = 24,
-    ATS_RPC_NET_CMD_CELLULAR_GET_CELL_ID = 25,
-    ATS_RPC_NET_CMD_CELLULAR_SET_SIGNAL = 26,
-    ATS_RPC_NET_CMD_CELLULAR_GET_SIGNAL = 27,
-    ATS_RPC_NET_CMD_CELLULAR_SET_IMSI = 28,
-    ATS_RPC_NET_CMD_CELLULAR_GET_IMSI = 29,
-    ATS_RPC_NET_CMD_CELLULAR_SET_IMEI = 30,
-    ATS_RPC_NET_CMD_CELLULAR_GET_IMEI = 31
+    ATS_RPC_NET_CMD_STATUS_CHANGE = 7,
+    ATS_RPC_NET_CMD_WIFI_MODULE_STATUS_CHANGE = 8,
+    ATS_RPC_NET_CMD_WIFI_GET_SSID = 9,
+    ATS_RPC_NET_CMD_WIFI_GET_SIGNAL = 10,
+    ATS_RPC_NET_CMD_WIFI_GET_AP_LIST = 11,
+    ATS_RPC_NET_CMD_CELLULAR_GET_MCC = 12,
+    ATS_RPC_NET_CMD_CELLULAR_GET_MNC = 13,
+    ATS_RPC_NET_CMD_CELLULAR_GET_LAC = 14,
+    ATS_RPC_NET_CMD_CELLULAR_GET_CELL_ID = 15,
+    ATS_RPC_NET_CMD_CELLULAR_GET_SIGNAL = 16,
+    ATS_RPC_NET_CMD_CELLULAR_GET_IMSI = 17,
+    ATS_RPC_NET_CMD_CELLULAR_GET_IMEI = 18
 } ats_rpc_net_command_t;
 
 typedef enum
 {
     ATS_RPC_AUDIO_CMD_SET_VOLUME = 1,
     ATS_RPC_AUDIO_CMD_GET_VOLUME = 2,
-    ATS_RPC_AUDIO_CMD_PLAY_FILE = 3,
-    ATS_RPC_AUDIO_CMD_INIT = 4,
-    ATS_RPC_AUDIO_CMD_SHUTDOWN = 5,
-    ATS_RPC_AUDIO_CMD_IS_PLAYING = 6
+    ATS_RPC_AUDIO_CMD_PLAY_FILE = 3
 } ats_rpc_audio_command_t;
 
 typedef enum
@@ -156,10 +136,16 @@ typedef struct
 
 typedef int (*ats_rpc_handler_t)(const ats_rpc_frame_t *frame);
 
+void ats_rpc_write_u16_le(uint8_t *buffer, uint16_t value);
+uint16_t ats_rpc_read_u16_le(const uint8_t *buffer);
+void ats_rpc_write_u32_le(uint8_t *buffer, uint32_t value);
+uint32_t ats_rpc_read_u32_le(const uint8_t *buffer);
+
 int ats_rpc_event(uint8_t service, uint8_t command, const uint8_t *payload, uint16_t payload_length);
 void ats_rpc_event_for_crash(uint32_t pc, uint32_t lr);
 int ats_rpc_response(uint8_t service, uint8_t command, const uint8_t *payload, uint16_t payload_length);
 int ats_rpc_request(uint8_t service, uint8_t command, const uint8_t *request_payload, uint16_t request_length, uint8_t *response_payload, uint16_t *response_length, uint32_t timeout_ms);
+int ats_rpc_request_ex(uint8_t service, uint8_t command, const uint8_t *request_payload, uint16_t request_length, uint8_t *response_payload, uint16_t *response_length, uint32_t timeout_ms, uint32_t match_key);
 
 void ats_rpc_init(void);
 void ats_rpc_register_service(uint8_t service, const ats_rpc_handler_t handler);

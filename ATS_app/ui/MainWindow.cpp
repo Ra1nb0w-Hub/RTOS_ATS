@@ -1,6 +1,5 @@
 #include "MainWindow.h"
 #include "ui_MainWindow.h"
-#include "sdk/ats_printer.h"
 
 #include <QFileDialog>
 #include <QMessageBox>
@@ -35,20 +34,6 @@ MainWindow::MainWindow(QWidget *parent)
     setupToolBar();
 
     s_mainWindow = this;
-    ats_printer_set_close_callback([]() {
-        int w = 0, h = 0;
-        const unsigned char *data = ats_printer_get_receipt_buffer(&w, &h);
-        qDebug() << "[Receipt] close_callback fired, data:" << (void*)data << "w:" << w << "h:" << h;
-        if (data && w > 0 && h > 0) {
-            s_mainWindow->m_receiptPanel->setReceiptData(
-                QByteArray(reinterpret_cast<const char *>(data), w * h), w, h);
-            qDebug() << "[Receipt] Copied" << w * h << "bytes, invoking showReceipt";
-            QMetaObject::invokeMethod(s_mainWindow->m_receiptPanel, "showReceipt", Qt::QueuedConnection);
-        } else {
-            qDebug() << "[Receipt] No valid buffer in callback!";
-        }
-    });
-
     connectSignals();
 
     m_logPanel->appendLog("=== ATS系统已启动 ===", "SYS");
@@ -202,6 +187,8 @@ void MainWindow::connectSignals()
             startQemuWithImportedElf();
         }
     });
+
+    connect(m_receiptPanel, &ReceiptPanel::paperStatusChanged, m_serialServer->processor(), &RpcFrameProcessor::onReportPaperStatus);
 }
 
 void MainWindow::startQemuWithImportedElf()

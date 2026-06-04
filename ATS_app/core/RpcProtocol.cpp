@@ -112,6 +112,23 @@ QByteArray buildResponseFrame(quint8 service, quint8 command,
     return frame;
 }
 
+QByteArray buildEventFrame(quint8 service, quint8 command, const QByteArray &payload)
+{
+    const int dataLength = payload.size();
+
+    QByteArray frame;
+    frame.reserve(kHeaderSize + dataLength);
+    frame.append(static_cast<char>(kSof0));
+    frame.append(static_cast<char>(kSof1));
+    frame.append(static_cast<char>(kFrameTypeEvent));
+    frame.append(static_cast<char>(service));
+    frame.append(static_cast<char>(command));
+    frame.append(static_cast<char>(dataLength & 0xFF));
+    frame.append(static_cast<char>((dataLength >> 8) & 0xFF));
+    frame.append(payload);
+    return frame;
+}
+
 bool tryExtractFrame(QByteArray *buffer, Frame *frame)
 {
     if (!buffer || !frame) {
@@ -206,28 +223,6 @@ bool isCoreRequest(const Frame &frame, quint8 expectedCommand)
     return frame.frameType == kFrameTypeRequest &&
            frame.service == kServiceCore &&
            frame.command == expectedCommand;
-}
-
-bool decodeCoreDateTimeRequest(const Frame &frame, DateTime *dt)
-{
-    if (!dt || !isCoreRequest(frame, kCoreCommandSetDateTime)) {
-        return false;
-    }
-
-    if (frame.payload.size() != 7) {
-        return false;
-    }
-
-    const char *data = frame.payload.constData();
-    dt->year   = static_cast<quint8>(data[0]) | (static_cast<quint16>(static_cast<quint8>(data[1])) << 8);
-    dt->month  = static_cast<quint8>(data[2]);
-    dt->day    = static_cast<quint8>(data[3]);
-    dt->hour   = static_cast<quint8>(data[4]);
-    dt->minute = static_cast<quint8>(data[5]);
-    dt->second = static_cast<quint8>(data[6]);
-
-    return dt->month >= 1 && dt->month <= 12 &&
-           dt->day >= 1 && dt->day <= 31;
 }
 
 bool isLcdEvent(const Frame &frame)
@@ -384,14 +379,6 @@ bool isPrinterEvent(const Frame &frame, quint8 expectedCommand)
     return isFrameForCommand(frame, kServicePrinter, expectedCommand);
 }
 
-bool isPrinterPaperStatusRequest(const Frame &frame)
-{
-    return frame.frameType == kFrameTypeRequest &&
-           frame.service == kServicePrinter &&
-           frame.command == kPrinterCommandGetPaperStatus &&
-           frame.payload.isEmpty();
-}
-
 bool decodePrinterEnumEvent(const Frame &frame, quint8 expectedCommand, quint8 *value)
 {
     if (!value || !isPrinterEvent(frame, expectedCommand) || frame.payload.size() != 1) {
@@ -404,18 +391,20 @@ bool decodePrinterEnumEvent(const Frame &frame, quint8 expectedCommand, quint8 *
 
 bool decodePrinterPrintTextEvent(const Frame &frame, PrinterPrintTextEvent *event)
 {
-    if (!event || !isPrinterEvent(frame, kPrinterCommandPrintText) || frame.payload.isEmpty()) {
+    if (!event || !isPrinterEvent(frame, kPrinterCommandPrintText) || frame.payload.size() < 3) {
         return false;
     }
 
     event->isEndOfLine = static_cast<quint8>(frame.payload[0]) != 0U;
-    event->text = frame.payload.mid(1);
+    event->alignMode = static_cast<quint8>(frame.payload[1]);
+    event->fontSize = static_cast<quint8>(frame.payload[2]);
+    event->text = frame.payload.mid(3);
     return true;
 }
 
 bool decodePrinterPrintBitmapEvent(const Frame &frame, PrinterPrintBitmapEvent *event)
 {
-    if (!event || !isPrinterEvent(frame, kPrinterCommandPrintBitmap) || frame.payload.size() < 4) {
+    if (!event || !isPrinterEvent(frame, kPrinterCommandPrintBitmap) || frame.payload.size() < 6) {
         return false;
     }
 
@@ -427,32 +416,24 @@ bool decodePrinterPrintBitmapEvent(const Frame &frame, PrinterPrintBitmapEvent *
         return false;
     }
 
+    event->alignMode = static_cast<quint8>(data[4]);
+    const quint8 encoding = static_cast<quint8>(data[5]);
+    const QByteArray encodedBitmap = frame.payload.mid(6);
+
     const int expectedBitmapBytes =
         static_cast<int>(((event->width + 7U) / 8U) * event->height);
-    if (frame.payload.size() == 4 + expectedBitmapBytes) {
-        event->bitmapData = frame.payload.mid(4);
-        return true;
-    }
 
-    if (frame.payload.size() < 5) {
-        return false;
-    }
-
-    {
-        const quint8 encoding = static_cast<quint8>(data[4]);
-        const QByteArray encodedBitmap = frame.payload.mid(5);
-        switch (encoding) {
-        case kBitmapEncodingRaw:
-            if (encodedBitmap.size() != expectedBitmapBytes) {
-                return false;
-            }
-            event->bitmapData = encodedBitmap;
-            return true;
-        case kBitmapEncodingRle8:
-            return decodeRleBytes(encodedBitmap, expectedBitmapBytes, &event->bitmapData);
-        default:
+    switch (encoding) {
+    case kBitmapEncodingRaw:
+        if (encodedBitmap.size() != expectedBitmapBytes) {
             return false;
         }
+        event->bitmapData = encodedBitmap;
+        return true;
+    case kBitmapEncodingRle8:
+        return decodeRleBytes(encodedBitmap, expectedBitmapBytes, &event->bitmapData);
+    default:
+        return false;
     }
 }
 

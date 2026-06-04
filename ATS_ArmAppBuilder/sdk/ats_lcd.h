@@ -72,16 +72,6 @@ int ats_lcd_draw_1bit_bitmap(unsigned short x, unsigned short y, unsigned short 
 int ats_lcd_draw_16bit_bitmap(unsigned short x, unsigned short y, unsigned short width, unsigned short height, unsigned short *bitMapData);
 
 /**
- * @brief 获取 LCD 宽度
- */
-unsigned short ats_lcd_get_width(void);
-
-/**
- * @brief 获取 LCD 高度
- */
-unsigned short ats_lcd_get_height(void);
-
-/**
  * @brief 释放帧缓冲
  */
 void ats_lcd_deinit(void);
