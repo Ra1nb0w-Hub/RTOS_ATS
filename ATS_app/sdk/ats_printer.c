@@ -528,6 +528,30 @@ static int s_receipt_height = 0;
 static int s_cursor_y = 0;          /* 当前写入行（像素 Y 坐标） */
 static int s_opened = 0;            /* 打印机是否已打开 */
 
+/* 待打印操作缓冲区 */
+#define ATS_PRINTER_MAX_PENDING_OPS 128
+
+typedef enum {
+    PRINTER_OP_NONE = 0,
+    PRINTER_OP_TEXT,
+    PRINTER_OP_BITMAP
+} printer_op_type_t;
+
+typedef struct {
+    printer_op_type_t type;
+    ats_printer_align_mode_t align;
+    ats_printer_font_size_t font;
+    bool is_end_of_line;
+    char text[256];
+    /* bitmap */
+    unsigned char *bitmap_data;
+    int bitmap_w;
+    int bitmap_h;
+} printer_op_t;
+
+static printer_op_t s_pending_ops[ATS_PRINTER_MAX_PENDING_OPS];
+static int s_pending_count = 0;
+
 /* =========================================================
  * 内部辅助函数
  * ========================================================= */
@@ -807,8 +831,49 @@ static void render_bitmap(const unsigned char *data, int width, int height)
  * 公共 API
  * ========================================================= */
 
+/* 前向声明 —— 将原有渲染逻辑抽离为内部函数 */
+static void render_text_data_impl(char *data, bool is_end_of_line);
+static void render_bitmap_impl(const unsigned char *data, int width, int height);
+
+/**
+ * @brief 刷新待打印操作缓冲区，渲染到小票图像
+ */
+static void printer_flush_pending_ops(void)
+{
+    for (int i = 0; i < s_pending_count; i++)
+    {
+        printer_op_t *op = &s_pending_ops[i];
+        if (op->type == PRINTER_OP_TEXT)
+        {
+            s_align_mode = op->align;
+            s_font_size = op->font;
+            render_text_data_impl(op->text, op->is_end_of_line);
+        }
+        else if (op->type == PRINTER_OP_BITMAP)
+        {
+            s_align_mode = op->align;
+            render_bitmap_impl(op->bitmap_data, op->bitmap_w, op->bitmap_h);
+            free(op->bitmap_data);
+            op->bitmap_data = NULL;
+        }
+        op->type = PRINTER_OP_NONE;
+    }
+    s_pending_count = 0;
+}
+
 int ats_printer_open(void)
 {
+    /* 清除待打印缓冲区 */
+    for (int i = 0; i < s_pending_count; i++)
+    {
+        if (s_pending_ops[i].type == PRINTER_OP_BITMAP && s_pending_ops[i].bitmap_data)
+        {
+            free(s_pending_ops[i].bitmap_data);
+            s_pending_ops[i].bitmap_data = NULL;
+        }
+    }
+    s_pending_count = 0;
+
     /* 重置缓冲区 */
     if (s_receipt_buf)
     {
@@ -844,6 +909,12 @@ int ats_printer_close(void)
     return 0;
 }
 
+int ats_printer_start(void)
+{
+    printer_flush_pending_ops();
+    return 0;
+}
+
 int ats_printer_set_align_mode(ats_printer_align_mode_t align)
 {
     if (align < ATS_PRINTER_ALIGN_MODE_LEFT || align > ATS_PRINTER_ALIGN_MODE_RIGHT)
@@ -876,13 +947,13 @@ int ats_printer_get_font_size(ats_printer_font_size_t *size)
     return 0;
 }
 
-int ats_printer_set_print_data(char *data, bool is_end_of_line)
+static void render_text_data_impl(char *data, bool is_end_of_line)
 {
     if (!s_opened || !s_receipt_buf)
-        return -1;
+        return;
 
     if (!data)
-        return 0;
+        return;
 
     /* 保存当前对齐模式，用于换行后恢复 */
     ats_printer_align_mode_t saved_align = s_align_mode;
@@ -895,7 +966,7 @@ int ats_printer_set_print_data(char *data, bool is_end_of_line)
             s_cursor_y += get_line_pixel_height();
             s_align_mode = saved_align;
         }
-        return 0;
+        return;
     }
     
     /* 处理数据中的换行符和回车符 */
@@ -977,19 +1048,63 @@ int ats_printer_set_print_data(char *data, bool is_end_of_line)
             }
         }
     }
-    
+}
+
+int ats_printer_set_print_data(char *data, bool is_end_of_line)
+{
+    if (!s_opened)
+        return -1;
+    if (!data)
+        return 0;
+    if (s_pending_count >= ATS_PRINTER_MAX_PENDING_OPS)
+        return -1;
+
+    printer_op_t *op = &s_pending_ops[s_pending_count++];
+    op->type = PRINTER_OP_TEXT;
+    op->align = s_align_mode;
+    op->font = s_font_size;
+    op->is_end_of_line = is_end_of_line;
+    strncpy(op->text, data, sizeof(op->text) - 1);
+    op->text[sizeof(op->text) - 1] = '\0';
+    op->bitmap_data = NULL;
     return 0;
+}
+
+static void render_bitmap_impl(const unsigned char *data, int width, int height)
+{
+    if (!s_opened || !s_receipt_buf)
+        return;
+
+    if (!data || width <= 0 || height <= 0)
+        return;
+
+    render_bitmap(data, width, height);
 }
 
 int ats_printer_set_print_bitmap(unsigned char *data, int width, int height)
 {
-    if (!s_opened || !s_receipt_buf)
+    if (!s_opened)
         return -1;
-
     if (!data || width <= 0 || height <= 0)
         return -1;
+    if (s_pending_count >= ATS_PRINTER_MAX_PENDING_OPS)
+        return -1;
 
-    render_bitmap(data, width, height);
+    int bytes = ((width + 7) / 8) * height;
+    unsigned char *copy = (unsigned char *)malloc(bytes);
+    if (!copy)
+        return -1;
+    memcpy(copy, data, bytes);
+
+    printer_op_t *op = &s_pending_ops[s_pending_count++];
+    op->type = PRINTER_OP_BITMAP;
+    op->align = s_align_mode;
+    op->font = ATS_PRINTER_FONT_SIZE_NORMAL;
+    op->is_end_of_line = false;
+    op->text[0] = '\0';
+    op->bitmap_data = copy;
+    op->bitmap_w = width;
+    op->bitmap_h = height;
     return 0;
 }
 

@@ -34,6 +34,13 @@ int ats_printer_open(void);
 int ats_printer_close(void);
 
 /**
+ * @brief 开始打印
+ *
+ * @return 0:成功 <0:失败
+ */
+int ats_printer_start(void);
+
+/**
  * @brief 设置对齐方式
  *
  * @param align 对齐方式
