@@ -114,9 +114,8 @@ int ats_sock_connect(ats_sock_t sock, const char *host, uint16_t port, unsigned 
     else
         rpc_timeout += ATS_NET_RPC_OVERHEAD_MS;
 
-    int ret = ats_rpc_request_ex(ATS_RPC_SERVICE_NET, ATS_RPC_NET_CMD_SOCK_CONNECT,
-                                  req, req_len, resp, &resp_len, rpc_timeout,
-                                  (uint32_t)sock);
+    int ret = ats_rpc_request(ATS_RPC_SERVICE_NET, ATS_RPC_NET_CMD_SOCK_CONNECT,
+                                  req, req_len, resp, &resp_len, rpc_timeout);
     ats_free(req);
 
     if (ret != ATS_EC_OK)
@@ -186,9 +185,8 @@ int ats_sock_recv(ats_sock_t sock, void *buf, unsigned int len, unsigned int tim
     else
         rpc_timeout += ATS_NET_RPC_OVERHEAD_MS;
 
-    int ret = ats_rpc_request_ex(ATS_RPC_SERVICE_NET, ATS_RPC_NET_CMD_SOCK_RECV,
-                                  req, sizeof(req), resp, &resp_len, rpc_timeout,
-                                  (uint32_t)sock);
+    int ret = ats_rpc_request(ATS_RPC_SERVICE_NET, ATS_RPC_NET_CMD_SOCK_RECV,
+                                  req, sizeof(req), resp, &resp_len, rpc_timeout);
     if (ret != ATS_EC_OK)
     {
         ats_free(resp);
@@ -200,7 +198,6 @@ int ats_sock_recv(ats_sock_t sock, void *buf, unsigned int len, unsigned int tim
         return ATS_EC_BAD_DATA;
     }
 
-    /* sock 已在 match_key 中校验，跳过前 4 字节 */
     int32_t bytes_recv = (int32_t)ats_rpc_read_u32_le(&resp[4]);
 
     /* bytes_recv <= 0: 连接关闭/超时/错误, 返回 bytes_recv 告知上层具体原因 */

@@ -14,8 +14,8 @@ ReceiptPanel::ReceiptPanel(QWidget *parent)
     s_instance = this;
 
     ats_printer_rpc_callback_t rpc_callback;
-    rpc_callback.paper_status_change = ReceiptPanel::onPaperStatusChange;
-    rpc_callback.show_print_content = ReceiptPanel::onShowPrintContent;
+    rpc_callback.paper_status_change = ReceiptPanel::onPaperStatusChangeCallback;
+    rpc_callback.show_print_content = ReceiptPanel::onShowPrintContentCallback;
 
     ats_printer_rpc_register_callback(&rpc_callback);
 }
@@ -23,16 +23,17 @@ ReceiptPanel::ReceiptPanel(QWidget *parent)
 ReceiptPanel::~ReceiptPanel()
 {
     delete m_ui;
+    s_instance = nullptr;
 }
 
-void ReceiptPanel::onPaperStatusChange(bool status)
+void ReceiptPanel::onPaperStatusChangeCallback(bool status)
 {
     if (!s_instance) return;
 
     emit s_instance->paperStatusChanged(status);
 }
 
-void ReceiptPanel::onShowPrintContent()
+void ReceiptPanel::onShowPrintContentCallback()
 {
     if (!s_instance) return;
 

@@ -37,7 +37,7 @@ static constexpr quint8 kPrinterCommandClose = 2;
 static constexpr quint8 kPrinterCommandStart = 3;
 static constexpr quint8 kPrinterCommandPrintText = 4;
 static constexpr quint8 kPrinterCommandPrintBitmap = 5;
-static constexpr quint8 kPrinterCommandSetPaperStatus = 6;
+static constexpr quint8 kPrinterCommandPaperStatusChange = 6;
 
 static constexpr quint8 kFsCommandOpen = 1;
 static constexpr quint8 kFsCommandClose = 2;
@@ -54,18 +54,19 @@ static constexpr quint8 kNetCommandSockSend = 3;
 static constexpr quint8 kNetCommandSockRecv = 4;
 static constexpr quint8 kNetCommandSockClose = 5;
 static constexpr quint8 kNetCommandSetMode = 6;
-static constexpr quint8 kNetCommandStatusChange = 7;
-static constexpr quint8 kNetCommandWifiModuleStatusChange = 8;
-static constexpr quint8 kNetCommandWifiGetSsid = 9;
-static constexpr quint8 kNetCommandWifiGetSignal = 10;
-static constexpr quint8 kNetCommandWifiGetApList = 11;
-static constexpr quint8 kNetCommandCellularGetMcc = 12;
-static constexpr quint8 kNetCommandCellularGetMnc = 13;
-static constexpr quint8 kNetCommandCellularGetLac = 14;
-static constexpr quint8 kNetCommandCellularGetCellId = 15;
-static constexpr quint8 kNetCommandCellularGetSignal = 16;
-static constexpr quint8 kNetCommandCellularGetImsi = 17;
-static constexpr quint8 kNetCommandCellularGetImei = 18;
+static constexpr quint8 kNetCommandModeChange = 7;
+static constexpr quint8 kNetCommandStatusChange = 8;
+static constexpr quint8 kNetCommandWifiModuleStatusChange = 9;
+static constexpr quint8 kNetCommandWifiGetSsid = 10;
+static constexpr quint8 kNetCommandWifiGetSignal = 11;
+static constexpr quint8 kNetCommandWifiGetApList = 12;
+static constexpr quint8 kNetCommandCellularGetMcc = 13;
+static constexpr quint8 kNetCommandCellularGetMnc = 14;
+static constexpr quint8 kNetCommandCellularGetLac = 15;
+static constexpr quint8 kNetCommandCellularGetCellId = 16;
+static constexpr quint8 kNetCommandCellularGetSignal = 17;
+static constexpr quint8 kNetCommandCellularGetImsi = 18;
+static constexpr quint8 kNetCommandCellularGetImei = 19;
 
 static constexpr quint8 kAudioCommandSetVolume = 1;
 static constexpr quint8 kAudioCommandGetVolume = 2;
@@ -88,13 +89,14 @@ static constexpr quint8 kBitmapEncodingRaw = 0;
 static constexpr quint8 kBitmapEncodingRle8 = 1;
 static constexpr quint8 kBitmapEncodingRle16 = 2;
 
-static constexpr int kHeaderSize = 7;
+static constexpr int kHeaderSize = 8;
 
 struct Frame
 {
     quint8 frameType = 0;
     quint8 service = 0;
     quint8 command = 0;
+    quint8 requestId = 0;
     QByteArray payload;
 };
 
@@ -175,7 +177,7 @@ struct CrashEvent
     quint32 mmfar = 0;
 };
 
-QByteArray buildResponseFrame(quint8 service, quint8 command, const QByteArray &payload = QByteArray());
+QByteArray buildResponseFrame(quint8 service, quint8 command, quint8 requestId, const QByteArray &payload = QByteArray());
 QByteArray buildEventFrame(quint8 service, quint8 command, const QByteArray &payload = QByteArray());
 
 bool tryExtractFrame(QByteArray *buffer, Frame *frame);

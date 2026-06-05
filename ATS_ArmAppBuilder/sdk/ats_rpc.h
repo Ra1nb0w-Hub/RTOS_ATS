@@ -10,7 +10,7 @@ extern "C" {
 
 #define ATS_RPC_SOF0                   0xA5U
 #define ATS_RPC_SOF1                   0x5AU
-#define ATS_RPC_HEADER_SIZE            7U
+#define ATS_RPC_HEADER_SIZE            8U
 
 typedef enum
 {
@@ -81,18 +81,19 @@ typedef enum
     ATS_RPC_NET_CMD_SOCK_RECV = 4,
     ATS_RPC_NET_CMD_SOCK_CLOSE = 5,
     ATS_RPC_NET_CMD_SET_MODE = 6,
-    ATS_RPC_NET_CMD_STATUS_CHANGE = 7,
-    ATS_RPC_NET_CMD_WIFI_MODULE_STATUS_CHANGE = 8,
-    ATS_RPC_NET_CMD_WIFI_GET_SSID = 9,
-    ATS_RPC_NET_CMD_WIFI_GET_SIGNAL = 10,
-    ATS_RPC_NET_CMD_WIFI_GET_AP_LIST = 11,
-    ATS_RPC_NET_CMD_CELLULAR_GET_MCC = 12,
-    ATS_RPC_NET_CMD_CELLULAR_GET_MNC = 13,
-    ATS_RPC_NET_CMD_CELLULAR_GET_LAC = 14,
-    ATS_RPC_NET_CMD_CELLULAR_GET_CELL_ID = 15,
-    ATS_RPC_NET_CMD_CELLULAR_GET_SIGNAL = 16,
-    ATS_RPC_NET_CMD_CELLULAR_GET_IMSI = 17,
-    ATS_RPC_NET_CMD_CELLULAR_GET_IMEI = 18
+    ATS_RPC_NET_CMD_MODE_CHANGE = 7,
+    ATS_RPC_NET_CMD_STATUS_CHANGE = 8,
+    ATS_RPC_NET_CMD_WIFI_MODULE_STATUS_CHANGE = 9,
+    ATS_RPC_NET_CMD_WIFI_GET_SSID = 10,
+    ATS_RPC_NET_CMD_WIFI_GET_SIGNAL = 11,
+    ATS_RPC_NET_CMD_WIFI_GET_AP_LIST = 12,
+    ATS_RPC_NET_CMD_CELLULAR_GET_MCC = 13,
+    ATS_RPC_NET_CMD_CELLULAR_GET_MNC = 14,
+    ATS_RPC_NET_CMD_CELLULAR_GET_LAC = 15,
+    ATS_RPC_NET_CMD_CELLULAR_GET_CELL_ID = 16,
+    ATS_RPC_NET_CMD_CELLULAR_GET_SIGNAL = 17,
+    ATS_RPC_NET_CMD_CELLULAR_GET_IMSI = 18,
+    ATS_RPC_NET_CMD_CELLULAR_GET_IMEI = 19
 } ats_rpc_net_command_t;
 
 typedef enum
@@ -130,6 +131,7 @@ typedef struct
     uint8_t frame_type;
     uint8_t service;
     uint8_t command;
+    uint8_t request_id;
     uint16_t payload_length;
     uint8_t *payload;
 } ats_rpc_frame_t;
@@ -143,15 +145,16 @@ uint32_t ats_rpc_read_u32_le(const uint8_t *buffer);
 
 int ats_rpc_event(uint8_t service, uint8_t command, const uint8_t *payload, uint16_t payload_length);
 void ats_rpc_event_for_crash(uint32_t pc, uint32_t lr);
-int ats_rpc_response(uint8_t service, uint8_t command, const uint8_t *payload, uint16_t payload_length);
+int ats_rpc_response(uint8_t service, uint8_t command, uint8_t request_id, const uint8_t *payload, uint16_t payload_length);
 int ats_rpc_request(uint8_t service, uint8_t command, const uint8_t *request_payload, uint16_t request_length, uint8_t *response_payload, uint16_t *response_length, uint32_t timeout_ms);
-int ats_rpc_request_ex(uint8_t service, uint8_t command, const uint8_t *request_payload, uint16_t request_length, uint8_t *response_payload, uint16_t *response_length, uint32_t timeout_ms, uint32_t match_key);
 
 void ats_rpc_init(void);
 void ats_rpc_register_service(uint8_t service, const ats_rpc_handler_t handler);
 void ats_rpc_dispatch(const ats_rpc_frame_t *frame);
 
 int ats_rpc_core_handler(const ats_rpc_frame_t *frame);
+int ats_rpc_printer_handler(const ats_rpc_frame_t *frame);
+int ats_rpc_net_handler(const ats_rpc_frame_t *frame);
 
 #ifdef __cplusplus
 }

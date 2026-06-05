@@ -10,7 +10,7 @@
 #include "FreeRTOS/task.h"
 #include <string.h>
 
-#define ATS_RPC_MAX_PENDING              4U
+#define ATS_RPC_MAX_PENDING        4U
 
 /* ------------------------------------------------------------------
  *  UART definitions
@@ -42,7 +42,7 @@ typedef struct
     uint16_t            response_buf_size;
     uint16_t           *response_len;
     int                 result;
-    uint32_t            match_key;
+    uint8_t             request_id;
     SemaphoreHandle_t   semaphore;
     bool                in_use;
 } ats_rpc_pending_t;
@@ -52,6 +52,7 @@ static ats_printer_rpc_callback_t s_printer_rpc_callback = {0};
 static ats_rpc_pending_t          s_pending[ATS_RPC_MAX_PENDING];
 static ats_rpc_handler_t          s_handlers[ATS_RPC_MAX_SERVICES];
 static bool                       s_rpc_initialized = false;
+static uint8_t                    s_request_id_counter = 0U;
 
 /* ------------------------------------------------------------------
  *  UART low-level helpers
@@ -236,7 +237,7 @@ static int read_exact(uint8_t *buffer, uint16_t length, uint32_t timeout_ms)
     return ATS_EC_OK;
 }
 
-static int send_frame(uint8_t frame_type, uint8_t service, uint8_t command, const uint8_t *payload, uint16_t payload_length)
+static int send_frame(uint8_t frame_type, uint8_t service, uint8_t command, uint8_t request_id, const uint8_t *payload, uint16_t payload_length)
 {
     const uint16_t frame_length = (uint16_t)(ATS_RPC_HEADER_SIZE + payload_length);
     uint8_t *frame_buffer;
@@ -263,7 +264,8 @@ static int send_frame(uint8_t frame_type, uint8_t service, uint8_t command, cons
     frame_buffer[2] = frame_type;
     frame_buffer[3] = service;
     frame_buffer[4] = command;
-    ats_rpc_write_u16_le(&frame_buffer[5], payload_length);
+    frame_buffer[5] = request_id;
+    ats_rpc_write_u16_le(&frame_buffer[6], payload_length);
 
     if (payload_length != 0U)
     {
@@ -320,7 +322,7 @@ static int recv_frame(ats_rpc_frame_t *frame, uint32_t timeout_ms)
         return status;
     }
 
-    payload_length = ats_rpc_read_u16_le(&header[5]);
+    payload_length = ats_rpc_read_u16_le(&header[6]);
 
     if (payload_length != 0U)
     {
@@ -348,6 +350,7 @@ static int recv_frame(ats_rpc_frame_t *frame, uint32_t timeout_ms)
     frame->frame_type = header[2];
     frame->service = header[3];
     frame->command = header[4];
+    frame->request_id = header[5];
     frame->payload_length = payload_length;
 
     return ATS_EC_OK;
@@ -357,6 +360,8 @@ static void rpc_task(void *args)
 {
     (void)args;
     (void)ats_rpc_register_service(ATS_RPC_SERVICE_CORE, ats_rpc_core_handler);
+    (void)ats_rpc_register_service(ATS_RPC_SERVICE_PRINTER, ats_rpc_printer_handler);
+    (void)ats_rpc_register_service(ATS_RPC_SERVICE_NET, ats_rpc_net_handler);
 
     for (;;)
     {
@@ -383,12 +388,12 @@ static void rpc_task(void *args)
 
 int ats_rpc_event(uint8_t service, uint8_t command, const uint8_t *payload, uint16_t payload_length)
 {
-    return send_frame(ATS_RPC_FRAME_TYPE_EVENT, service, command, payload, payload_length);
+    return send_frame(ATS_RPC_FRAME_TYPE_EVENT, service, command, 0U, payload, payload_length);
 }
 
 void ats_rpc_event_for_crash(uint32_t pc, uint32_t lr)
 {
-    uint8_t frame[31U] = {0};
+    uint8_t frame[32U] = {0};
 
     if (!s_rpc_initialized)
     {
@@ -400,76 +405,73 @@ void ats_rpc_event_for_crash(uint32_t pc, uint32_t lr)
     frame[2] = ATS_RPC_FRAME_TYPE_EVENT;
     frame[3] = ATS_RPC_SERVICE_CORE;
     frame[4] = ATS_RPC_CORE_CRASH;
-    frame[5] = 24U;
-    frame[6] = 0U;
+    frame[5] = 0U;      /* request_id: Event 固定为 0 */
+    frame[6] = 24U;
+    frame[7] = 0U;
 
-    /* PC [7..10] */
-    frame[7]  = (uint8_t)(pc & 0xFFU);
-    frame[8]  = (uint8_t)((pc >> 8) & 0xFFU);
-    frame[9]  = (uint8_t)((pc >> 16) & 0xFFU);
-    frame[10] = (uint8_t)((pc >> 24) & 0xFFU);
+    /* PC [8..11] */
+    frame[8]  = (uint8_t)(pc & 0xFFU);
+    frame[9]  = (uint8_t)((pc >> 8) & 0xFFU);
+    frame[10] = (uint8_t)((pc >> 16) & 0xFFU);
+    frame[11] = (uint8_t)((pc >> 24) & 0xFFU);
 
-    /* LR [11..14] */
-    frame[11] = (uint8_t)(lr & 0xFFU);
-    frame[12] = (uint8_t)((lr >> 8) & 0xFFU);
-    frame[13] = (uint8_t)((lr >> 16) & 0xFFU);
-    frame[14] = (uint8_t)((lr >> 24) & 0xFFU);
+    /* LR [12..15] */
+    frame[12] = (uint8_t)(lr & 0xFFU);
+    frame[13] = (uint8_t)((lr >> 8) & 0xFFU);
+    frame[14] = (uint8_t)((lr >> 16) & 0xFFU);
+    frame[15] = (uint8_t)((lr >> 24) & 0xFFU);
 
-    /* CFSR [15..18] — 0xE000ED28 */
+    /* CFSR [16..19] — 0xE000ED28 */
     {
         const uint32_t cfsr = *(const volatile uint32_t *)0xE000ED28U;
-        frame[15] = (uint8_t)(cfsr & 0xFFU);         /* MMFSR */
-        frame[16] = (uint8_t)((cfsr >> 8) & 0xFFU);   /* BFSR */
-        frame[17] = (uint8_t)((cfsr >> 16) & 0xFFU);  /* UFSR */
-        frame[18] = 0U;
+        frame[16] = (uint8_t)(cfsr & 0xFFU);         /* MMFSR */
+        frame[17] = (uint8_t)((cfsr >> 8) & 0xFFU);   /* BFSR */
+        frame[18] = (uint8_t)((cfsr >> 16) & 0xFFU);  /* UFSR */
+        frame[19] = 0U;
     }
 
-    /* HFSR [19..22] — 0xE000ED2C */
+    /* HFSR [20..23] — 0xE000ED2C */
     {
         const uint32_t hfsr = *(const volatile uint32_t *)0xE000ED2CU;
-        frame[19] = (uint8_t)(hfsr & 0xFFU);
-        frame[20] = (uint8_t)((hfsr >> 8) & 0xFFU);
-        frame[21] = (uint8_t)((hfsr >> 16) & 0xFFU);
-        frame[22] = (uint8_t)((hfsr >> 24) & 0xFFU);
+        frame[20] = (uint8_t)(hfsr & 0xFFU);
+        frame[21] = (uint8_t)((hfsr >> 8) & 0xFFU);
+        frame[22] = (uint8_t)((hfsr >> 16) & 0xFFU);
+        frame[23] = (uint8_t)((hfsr >> 24) & 0xFFU);
     }
 
-    /* BFAR [23..26] — 0xE000ED38 */
+    /* BFAR [24..27] — 0xE000ED38 */
     {
         const uint32_t bfar = *(const volatile uint32_t *)0xE000ED38U;
-        frame[23] = (uint8_t)(bfar & 0xFFU);
-        frame[24] = (uint8_t)((bfar >> 8) & 0xFFU);
-        frame[25] = (uint8_t)((bfar >> 16) & 0xFFU);
-        frame[26] = (uint8_t)((bfar >> 24) & 0xFFU);
+        frame[24] = (uint8_t)(bfar & 0xFFU);
+        frame[25] = (uint8_t)((bfar >> 8) & 0xFFU);
+        frame[26] = (uint8_t)((bfar >> 16) & 0xFFU);
+        frame[27] = (uint8_t)((bfar >> 24) & 0xFFU);
     }
 
-    /* MMFAR [27..30] — 0xE000ED34 */
+    /* MMFAR [28..31] — 0xE000ED34 */
     {
         const uint32_t mmfar = *(const volatile uint32_t *)0xE000ED34U;
-        frame[27] = (uint8_t)(mmfar & 0xFFU);
-        frame[28] = (uint8_t)((mmfar >> 8) & 0xFFU);
-        frame[29] = (uint8_t)((mmfar >> 16) & 0xFFU);
-        frame[30] = (uint8_t)((mmfar >> 24) & 0xFFU);
+        frame[28] = (uint8_t)(mmfar & 0xFFU);
+        frame[29] = (uint8_t)((mmfar >> 8) & 0xFFU);
+        frame[30] = (uint8_t)((mmfar >> 16) & 0xFFU);
+        frame[31] = (uint8_t)((mmfar >> 24) & 0xFFU);
     }
 
     (void)ats_rpc_transport_write(frame, sizeof(frame));
 }
 
-int ats_rpc_response(uint8_t service, uint8_t command, const uint8_t *payload, uint16_t payload_length)
+int ats_rpc_response(uint8_t service, uint8_t command, uint8_t request_id, const uint8_t *payload, uint16_t payload_length)
 {
-    return send_frame(ATS_RPC_FRAME_TYPE_RESPONSE, service, command, payload, payload_length);
+    return send_frame(ATS_RPC_FRAME_TYPE_RESPONSE, service, command, request_id, payload, payload_length);
 }
 
 int ats_rpc_request(uint8_t service, uint8_t command, const uint8_t *request_payload, uint16_t request_length, uint8_t *response_payload, uint16_t *response_length, uint32_t timeout_ms)
-{
-    return ats_rpc_request_ex(service, command, request_payload, request_length, response_payload, response_length, timeout_ms, 0U);
-}
-
-int ats_rpc_request_ex(uint8_t service, uint8_t command, const uint8_t *request_payload, uint16_t request_length, uint8_t *response_payload, uint16_t *response_length, uint32_t timeout_ms, uint32_t match_key)
 {
     int slot = -1;
     int status;
     TickType_t wait_ticks;
     UBaseType_t i;
+    uint8_t rid;
 
     if ((response_length == NULL) || ((response_payload == NULL) && (*response_length != 0U)))
     {
@@ -482,6 +484,14 @@ int ats_rpc_request_ex(uint8_t service, uint8_t command, const uint8_t *request_
     }
 
     taskENTER_CRITICAL();
+    /* 分配唯一 request_id: 1~255 循环 */
+    s_request_id_counter++;
+    if (s_request_id_counter == 0U)
+    {
+        s_request_id_counter = 1U;
+    }
+    rid = s_request_id_counter;
+
     for (i = 0U; i < ATS_RPC_MAX_PENDING; ++i)
     {
         if (!s_pending[i].in_use)
@@ -504,9 +514,10 @@ int ats_rpc_request_ex(uint8_t service, uint8_t command, const uint8_t *request_
     s_pending[slot].response_buf_size = *response_length;
     s_pending[slot].response_len     = response_length;
     s_pending[slot].result           = ATS_EC_TIMEOUT;
-    s_pending[slot].match_key        = match_key;
+    s_pending[slot].request_id       = rid;
 
-    status = send_frame(ATS_RPC_FRAME_TYPE_REQUEST, service, command, request_payload, request_length);
+    status = send_frame(ATS_RPC_FRAME_TYPE_REQUEST, service, command, rid, request_payload, request_length);
+
     if (status != ATS_EC_OK)
     {
         s_pending[slot].in_use = false;
@@ -541,6 +552,7 @@ void ats_rpc_init(void)
     {
         s_pending[i].semaphore = xSemaphoreCreateBinary();
         s_pending[i].in_use = false;
+        s_pending[i].request_id = 0U;
         if (s_pending[i].semaphore != NULL)
         {
             (void)xSemaphoreTake(s_pending[i].semaphore, 0U);
@@ -587,42 +599,34 @@ void ats_rpc_dispatch(const ats_rpc_frame_t *frame)
 
     if (frame->frame_type == ATS_RPC_FRAME_TYPE_RESPONSE)
     {
-        uint32_t resp_match_key = 0U;
-
-        /* 提取响应 payload 前 4 字节作为 match_key (用于多 socket 场景的请求匹配) */
-        if (frame->payload_length >= 4U)
-            resp_match_key = ats_rpc_read_u32_le(frame->payload);
+        uint8_t resp_request_id = frame->request_id;
 
         for (i = 0U; i < ATS_RPC_MAX_PENDING; ++i)
         {
-            if (s_pending[i].in_use &&
-                (s_pending[i].service == frame->service) &&
-                (s_pending[i].command == frame->command))
+            if (!s_pending[i].in_use)
+                continue;
+
+            /* 按 request_id 精确匹配, 不会误唤醒其他调用者 */
+            if (s_pending[i].request_id != resp_request_id)
+                continue;
+
+            if (frame->payload_length > s_pending[i].response_buf_size)
             {
-                /* 如果待处理槽设置了 match_key，则必须与响应匹配 */
-                if (s_pending[i].match_key != 0U && s_pending[i].match_key != resp_match_key)
-                {
-                    continue; /* 跳过，继续查找下一个匹配 */
-                }
-
-                if (frame->payload_length > s_pending[i].response_buf_size)
-                {
-                    s_pending[i].result = ATS_EC_TOO_LARGE;
-                }
-                else
-                {
-                    if (frame->payload_length != 0U)
-                    {
-                        (void)memcpy(s_pending[i].response_buf, frame->payload, frame->payload_length);
-                    }
-
-                    *(s_pending[i].response_len) = frame->payload_length;
-                    s_pending[i].result = ATS_EC_OK;
-                }
-
-                (void)xSemaphoreGive(s_pending[i].semaphore);
-                return;
+                s_pending[i].result = ATS_EC_TOO_LARGE;
             }
+            else
+            {
+                if (frame->payload_length != 0U)
+                {
+                    (void)memcpy(s_pending[i].response_buf, frame->payload, frame->payload_length);
+                }
+
+                *(s_pending[i].response_len) = frame->payload_length;
+                s_pending[i].result = ATS_EC_OK;
+            }
+
+            (void)xSemaphoreGive(s_pending[i].semaphore);
+            return;
         }
 
         return;
@@ -657,8 +661,74 @@ int ats_rpc_core_handler(const ats_rpc_frame_t *frame)
                 break;
             }
 
-            ats_rpc_response(ATS_RPC_SERVICE_CORE, ATS_RPC_CORE_GET_THREAD_INFO, (const uint8_t *)buf, (uint16_t)strlen(buf));
+            ats_rpc_response(ATS_RPC_SERVICE_CORE, ATS_RPC_CORE_GET_THREAD_INFO, frame->request_id, (const uint8_t *)buf, (uint16_t)strlen(buf));
             ats_free(buf);
+        } break;
+
+        default:
+            break;
+    }
+
+    return ATS_EC_OK;
+}
+
+int ats_rpc_printer_handler(const ats_rpc_frame_t *frame)
+{
+    switch (frame->command)
+    {
+        case ATS_RPC_PRINTER_CMD_SET_PAPER_STATUS:
+        {
+            bool paper_status = false;
+
+            if (frame->payload_length >= 1U)
+                paper_status = frame->payload[0] ? true : false;
+
+            if (s_printer_rpc_callback.paper_status_change)
+                s_printer_rpc_callback.paper_status_change(paper_status);
+        } break;
+
+        default:
+            break;
+    }
+
+    return ATS_EC_OK;
+}
+
+int ats_rpc_net_handler(const ats_rpc_frame_t *frame)
+{
+    switch (frame->command)
+    {
+        case ATS_RPC_NET_CMD_MODE_CHANGE:
+        {
+            ats_net_mode_t mode = ATS_NET_MODE_CELLUALR;
+
+            if (frame->payload_length >= 1U)
+                mode = (ats_net_mode_t)ats_rpc_read_u32_le(frame->payload);
+
+            if (s_net_rpc_callback.net_mode_change)
+                s_net_rpc_callback.net_mode_change(mode);
+        } break;
+
+        case ATS_RPC_NET_CMD_STATUS_CHANGE:
+        {
+            bool status = false;
+
+            if (frame->payload_length >= 1U)
+                status = frame->payload[0] ? true : false;
+
+            if (s_net_rpc_callback.net_status_change)
+                s_net_rpc_callback.net_status_change(status);
+        } break;
+
+        case ATS_RPC_NET_CMD_WIFI_MODULE_STATUS_CHANGE:
+        {
+            bool module_status = false;
+
+            if (frame->payload_length >= 1U)
+                module_status = frame->payload[0] ? true : false;
+
+            if (s_net_rpc_callback.wifi_module_status_change)
+                s_net_rpc_callback.wifi_module_status_change(module_status);
         } break;
 
         default:

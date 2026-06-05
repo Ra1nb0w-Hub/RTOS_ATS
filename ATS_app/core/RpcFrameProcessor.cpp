@@ -11,21 +11,17 @@
 #include "RpcProtocol.h"
 #include "Addr2LineResolver.h"
 #include "../log/LogManager.h"
-#include "../sdk/ats_lcd.h"
-#include "../sdk/ats_printer.h"
-#include "../sdk/ats_sys.h"
-#include "../sdk/ats_fs.h"
-#include "../sdk/ats_audio.h"
-#include "../sdk/ats_net.h"
-#include "../sdk/ats_reader.h"
 
 static qint32 readInt32Le(const char *data, int offset)
 {
-    return static_cast<qint32>(
-        static_cast<quint8>(data[offset])
-        | (static_cast<quint32>(static_cast<quint8>(data[offset + 1])) << 8)
-        | (static_cast<quint32>(static_cast<quint8>(data[offset + 2])) << 16)
-        | (static_cast<quint32>(static_cast<quint8>(data[offset + 3])) << 24));
+    qint32 value = 0;
+
+    value = static_cast<quint8>(data[offset]);
+    value |= (static_cast<quint32>(static_cast<quint8>(data[offset + 1])) << 8);
+    value |= (static_cast<quint32>(static_cast<quint8>(data[offset + 2])) << 16);
+    value |= (static_cast<quint32>(static_cast<quint8>(data[offset + 3])) << 24);
+
+    return value;
 }
 
 static QByteArray buildInt32Response(qint32 value)
@@ -79,6 +75,8 @@ void RpcFrameProcessor::setElfPath(const QString &path)
 
 void RpcFrameProcessor::dispatchFrame(const RpcProtocol::Frame &frame)
 {
+    m_currentRequestId = frame.requestId;
+
     switch (frame.service) {
     case RpcProtocol::kServiceCore:
         handleCoreFrame(frame);
@@ -124,10 +122,12 @@ void RpcFrameProcessor::postCrash(const QString &msg)
         Qt::QueuedConnection, Q_ARG(QString, msg));
 }
 
-void RpcFrameProcessor::onSockRecvFinished(quint8 service, quint8 command, int sock, int received, QByteArray data)
+void RpcFrameProcessor::onSockRecvFinished(quint8 service, quint8 command, int sock, int received, QByteArray data, quint8 requestId)
 {
+    m_currentRequestId = requestId;
+
     QByteArray respPayload;
-    /* 前 4 字节: sock 句柄 (用于 Target 端 match_key 匹配) */
+    /* sock 句柄 — 用于调用方校验 */
     respPayload.append(static_cast<char>(sock & 0xFF));
     respPayload.append(static_cast<char>((sock >> 8) & 0xFF));
     respPayload.append(static_cast<char>((sock >> 16) & 0xFF));
@@ -142,9 +142,11 @@ void RpcFrameProcessor::onSockRecvFinished(quint8 service, quint8 command, int s
     sendResponse(service, command, respPayload);
 }
 
-void RpcFrameProcessor::onSockConnectFinished(quint8 service, quint8 command, int sock, int ret)
+void RpcFrameProcessor::onSockConnectFinished(quint8 service, quint8 command, int sock, int ret, quint8 requestId)
 {
-    /* 前 4 字节: sock 句柄 (用于 Target 端 match_key 匹配) */
+    m_currentRequestId = requestId;
+
+    /* sock 句柄 — 用于调用方校验 */
     QByteArray payload;
     payload.append(static_cast<char>(sock & 0xFF));
     payload.append(static_cast<char>((sock >> 8) & 0xFF));
@@ -159,12 +161,12 @@ void RpcFrameProcessor::onSockConnectFinished(quint8 service, quint8 command, in
 
 void RpcFrameProcessor::sendResponse(quint8 service, quint8 command, const QByteArray &payload)
 {
-    postResponse(RpcProtocol::buildResponseFrame(service, command, payload));
+    postResponse(RpcProtocol::buildResponseFrame(service, command, m_currentRequestId, payload));
 }
 
 void RpcFrameProcessor::sendResponse(quint8 service, quint8 command)
 {
-    postResponse(RpcProtocol::buildResponseFrame(service, command));
+    postResponse(RpcProtocol::buildResponseFrame(service, command, m_currentRequestId));
 }
 
 void RpcFrameProcessor::sendEvent(quint8 service, quint8 command, const QByteArray &payload)
@@ -586,11 +588,13 @@ void RpcFrameProcessor::handleNetFrame(const RpcProtocol::Frame &frame)
             (static_cast<quint32>(static_cast<quint8>(data[5 + hostLen + 1])) << 8));
         const unsigned int timeoutMs = static_cast<unsigned int>(
             readInt32Le(data, 5 + hostLen + 2));
+        const quint8 reqId = m_currentRequestId;
 
-        QMetaObject::invokeMethod(m_netWorker, [this, sock, host, port, timeoutMs]() {
+        QMetaObject::invokeMethod(m_netWorker, [this, sock, host, port, timeoutMs, reqId]() {
             m_netWorker->execSockConnect(sock, host, port, timeoutMs,
                                           RpcProtocol::kServiceNet,
-                                          RpcProtocol::kNetCommandSockConnect);
+                                          RpcProtocol::kNetCommandSockConnect,
+                                          reqId);
         }, Qt::QueuedConnection);
         return;
     }
@@ -611,11 +615,13 @@ void RpcFrameProcessor::handleNetFrame(const RpcProtocol::Frame &frame)
         const int sock = static_cast<int>(readInt32Le(data, 0));
         const unsigned int bufLen = static_cast<unsigned int>(readInt32Le(data, 4));
         const unsigned int timeoutMs = static_cast<unsigned int>(readInt32Le(data, 8));
+        const quint8 reqId = m_currentRequestId;
 
-        QMetaObject::invokeMethod(m_netWorker, [this, sock, bufLen, timeoutMs]() {
+        QMetaObject::invokeMethod(m_netWorker, [this, sock, bufLen, timeoutMs, reqId]() {
             m_netWorker->execSockRecv(sock, bufLen, timeoutMs,
                                        RpcProtocol::kServiceNet,
-                                       RpcProtocol::kNetCommandSockRecv);
+                                       RpcProtocol::kNetCommandSockRecv,
+                                       reqId);
         }, Qt::QueuedConnection);
         return;
     }
@@ -999,5 +1005,20 @@ void RpcFrameProcessor::handleReaderFrame(const RpcProtocol::Frame &frame)
 
 void RpcFrameProcessor::onReportPaperStatus(bool status)
 {
-    sendEvent(RpcProtocol::kServicePrinter, RpcProtocol::kPrinterCommandSetPaperStatus, buildBoolResponse(status));
+    sendEvent(RpcProtocol::kServicePrinter, RpcProtocol::kPrinterCommandPaperStatusChange, buildBoolResponse(status));
+}
+
+void RpcFrameProcessor::onReportNetMode(ats_net_mode_t mode)
+{
+    sendEvent(RpcProtocol::kServiceNet, RpcProtocol::kNetCommandModeChange, buildInt32Response(mode));
+}
+
+void RpcFrameProcessor::onReportNetStatus(bool status)
+{
+    sendEvent(RpcProtocol::kServiceNet, RpcProtocol::kNetCommandStatusChange, buildBoolResponse(status));  
+}
+
+void RpcFrameProcessor::onReportWifiModuleStatus(bool status)
+{
+    sendEvent(RpcProtocol::kServiceNet, RpcProtocol::kNetCommandWifiModuleStatusChange, buildBoolResponse(status));
 }

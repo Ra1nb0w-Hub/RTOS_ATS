@@ -8,7 +8,7 @@ RpcNetWorker::RpcNetWorker(QObject *parent)
 }
 
 void RpcNetWorker::execSockRecv(int sock, unsigned int bufLen, unsigned int timeoutMs,
-                                 quint8 service, quint8 command)
+                                 quint8 service, quint8 command, quint8 requestId)
 {
     QByteArray recvBuf(static_cast<int>(bufLen), '\0');
     int received = ats_sock_recv(sock, recvBuf.data(), bufLen, timeoutMs);
@@ -18,12 +18,12 @@ void RpcNetWorker::execSockRecv(int sock, unsigned int bufLen, unsigned int time
         data = recvBuf.left(received);
     }
 
-    emit sockRecvFinished(service, command, sock, received, data);
+    emit sockRecvFinished(service, command, sock, received, data, requestId);
 }
 
 void RpcNetWorker::execSockConnect(int sock, const QByteArray &host, quint16 port,
-                                    unsigned int timeoutMs, quint8 service, quint8 command)
+                                    unsigned int timeoutMs, quint8 service, quint8 command, quint8 requestId)
 {
     int ret = ats_sock_connect(sock, host.constData(), port, timeoutMs);
-    emit sockConnectFinished(service, command, sock, ret);
+    emit sockConnectFinished(service, command, sock, ret, requestId);
 }

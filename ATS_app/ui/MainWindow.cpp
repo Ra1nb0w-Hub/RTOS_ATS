@@ -189,6 +189,9 @@ void MainWindow::connectSignals()
     });
 
     connect(m_receiptPanel, &ReceiptPanel::paperStatusChanged, m_serialServer->processor(), &RpcFrameProcessor::onReportPaperStatus);
+    connect(m_statusPanel, &StatusPanel::netModeChanged, m_serialServer->processor(), &RpcFrameProcessor::onReportNetMode);
+    connect(m_statusPanel, &StatusPanel::netStatusChanged, m_serialServer->processor(), &RpcFrameProcessor::onReportNetStatus);
+    connect(m_statusPanel, &StatusPanel::wifiModuleStatusChanged, m_serialServer->processor(), &RpcFrameProcessor::onReportWifiModuleStatus);
 }
 
 void MainWindow::startQemuWithImportedElf()

@@ -10,6 +10,7 @@
 #include "ats_error.h"
 #include "ats_rpc.h"
 #include "ats_rle.h"
+#include "ats_sys.h"
 
 #include <stddef.h>
 #include <stdint.h>

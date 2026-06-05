@@ -94,7 +94,7 @@ static bool decodeRleWords(const QByteArray &encodedData, int expectedWordCount,
     return offset == encodedData.size() && decodedWords->size() == expectedWordCount;
 }
 
-QByteArray buildResponseFrame(quint8 service, quint8 command,
+QByteArray buildResponseFrame(quint8 service, quint8 command, quint8 requestId,
                               const QByteArray &payload)
 {
     const int dataLength = payload.size();
@@ -106,6 +106,7 @@ QByteArray buildResponseFrame(quint8 service, quint8 command,
     frame.append(static_cast<char>(kFrameTypeResponse));
     frame.append(static_cast<char>(service));
     frame.append(static_cast<char>(command));
+    frame.append(static_cast<char>(requestId));
     frame.append(static_cast<char>(dataLength & 0xFF));
     frame.append(static_cast<char>((dataLength >> 8) & 0xFF));
     frame.append(payload);
@@ -123,6 +124,7 @@ QByteArray buildEventFrame(quint8 service, quint8 command, const QByteArray &pay
     frame.append(static_cast<char>(kFrameTypeEvent));
     frame.append(static_cast<char>(service));
     frame.append(static_cast<char>(command));
+    frame.append(static_cast<char>(0));  /* requestId: Event 固定为 0 */
     frame.append(static_cast<char>(dataLength & 0xFF));
     frame.append(static_cast<char>((dataLength >> 8) & 0xFF));
     frame.append(payload);
@@ -150,7 +152,8 @@ bool tryExtractFrame(QByteArray *buffer, Frame *frame)
 
     const char *raw = buffer->constData();
     const quint8 frameType = static_cast<quint8>(raw[2]);
-    const quint16 payloadLength = readLe16(raw + 5);
+    const quint8 requestId = static_cast<quint8>(raw[5]);
+    const quint16 payloadLength = readLe16(raw + 6);
 
     const int frameSize = kHeaderSize + static_cast<int>(payloadLength);
     if (buffer->size() < frameSize) {
@@ -160,6 +163,8 @@ bool tryExtractFrame(QByteArray *buffer, Frame *frame)
     frame->frameType = frameType;
     frame->service = static_cast<quint8>(raw[3]);
     frame->command = static_cast<quint8>(raw[4]);
+
+    frame->requestId = requestId;
     frame->payload = (payloadLength > 0)
         ? QByteArray(raw + kHeaderSize, payloadLength)
         : QByteArray();

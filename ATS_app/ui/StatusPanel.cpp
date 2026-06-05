@@ -1,19 +1,48 @@
 #include "StatusPanel.h"
-#include "sdk/ats_sys.h"
-#include "sdk/ats_audio.h"
-#include "sdk/ats_net.h"
-#include "sdk/ats_printer.h"
+
+StatusPanel *StatusPanel::s_instance = nullptr;
 
 StatusPanel::StatusPanel(QWidget *parent)
     : QWidget(parent)
     , m_ui(new Ui::StatusPanel)
 {
     m_ui->setupUi(this);
+
+    s_instance = this;
+
+    ats_net_rpc_callback_t rpc_callback;
+    rpc_callback.net_mode_change = StatusPanel::onNetModeChangeCallback;
+    rpc_callback.net_status_change = StatusPanel::onNetStatusChangeCallback;
+    rpc_callback.wifi_module_status_change = StatusPanel::onWifiModuleStatusChangeCallback;
+
+    ats_net_rpc_register_callback(&rpc_callback);
 }
 
 StatusPanel::~StatusPanel()
 {
     delete m_ui;
+    s_instance = nullptr;
+}
+
+void StatusPanel::onNetModeChangeCallback(ats_net_mode_t mode)
+{
+    if (!s_instance) return;
+
+    emit s_instance->netModeChanged(mode);
+}
+
+void StatusPanel::onNetStatusChangeCallback(bool status)
+{
+    if (!s_instance) return;
+
+    emit s_instance->netStatusChanged(status);
+}
+
+void StatusPanel::onWifiModuleStatusChangeCallback(bool status)
+{
+    if (!s_instance) return;
+
+    emit s_instance->wifiModuleStatusChanged(status);
 }
 
 void StatusPanel::setAppStarted(bool started)

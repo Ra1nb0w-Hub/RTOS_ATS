@@ -3,6 +3,14 @@
 #include <QObject>
 #include <QString>
 
+#include "sdk/ats_lcd.h"
+#include "sdk/ats_printer.h"
+#include "sdk/ats_sys.h"
+#include "sdk/ats_fs.h"
+#include "sdk/ats_audio.h"
+#include "sdk/ats_net.h"
+#include "sdk/ats_reader.h"
+
 class RpcSerialServer;
 class RpcNetWorker;
 class QThread;
@@ -23,10 +31,13 @@ public:
 
 public slots:
     void onReportPaperStatus(bool status);
+    void onReportNetMode(ats_net_mode_t mode);
+    void onReportNetStatus(bool status);
+    void onReportWifiModuleStatus(bool status);
 
 private slots:
-    void onSockRecvFinished(quint8 service, quint8 command, int sock, int received, QByteArray data);
-    void onSockConnectFinished(quint8 service, quint8 command, int sock, int ret);
+    void onSockRecvFinished(quint8 service, quint8 command, int sock, int received, QByteArray data, quint8 requestId);
+    void onSockConnectFinished(quint8 service, quint8 command, int sock, int ret, quint8 requestId);
 
 private:
     void postResponse(const QByteArray &frame);
@@ -51,4 +62,5 @@ private:
 
     QThread *m_netThread = nullptr;
     RpcNetWorker *m_netWorker = nullptr;
+    quint8 m_currentRequestId = 0;
 };

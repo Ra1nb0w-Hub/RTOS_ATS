@@ -22,8 +22,8 @@ signals:
 
 private:
     QImage grayToQImage(const unsigned char *data, int width, int height);
-    static void onPaperStatusChange(bool status);
-    static void onShowPrintContent();
+    static void onPaperStatusChangeCallback(bool status);
+    static void onShowPrintContentCallback();
     void setReceiptData(const QByteArray &data, int width, int height);
     void showReceipt();
     void scaleReceiptImage();
