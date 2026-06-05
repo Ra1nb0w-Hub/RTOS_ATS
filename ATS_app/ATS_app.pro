@@ -1,5 +1,5 @@
 # ─── ATS App 子项目 ──────────────────────────────────────────────────────────────
-QT += core gui widgets network xml
+QT += core gui widgets network xml charts
 
 greaterThan(QT_MAJOR_VERSION, 4): QT += widgets
 
@@ -42,6 +42,7 @@ SOURCES += \
     ui/StatusPanel.cpp \
     ui/LogPanel.cpp \
     ui/ReceiptPanel.cpp \
+    ui/ThreadMonitorPanel.cpp \
     core/TestCase.cpp \
     core/TestRunner.cpp \
     core/AppThread.cpp \
@@ -70,6 +71,7 @@ HEADERS += \
     ui/StatusPanel.h \
     ui/LogPanel.h \
     ui/ReceiptPanel.h \
+    ui/ThreadMonitorPanel.h \
     core/TestCase.h \
     core/TestRunner.h \
     core/AppThread.h \

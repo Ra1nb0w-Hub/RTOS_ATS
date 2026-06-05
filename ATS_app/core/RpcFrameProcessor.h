@@ -10,18 +10,16 @@
 #include "sdk/ats_audio.h"
 #include "sdk/ats_net.h"
 #include "sdk/ats_reader.h"
+#include "core/RpcProtocol.h"
 
 class RpcSerialServer;
 class RpcNetWorker;
 class QThread;
 
-namespace RpcProtocol
-{
-struct Frame;
-}
-
 class RpcFrameProcessor : public QObject
 {
+    Q_OBJECT
+
 public:
     explicit RpcFrameProcessor(RpcSerialServer *server);
     ~RpcFrameProcessor() override;
@@ -29,11 +27,16 @@ public:
     void setElfPath(const QString &path);
     void dispatchFrame(const RpcProtocol::Frame &frame);
 
+    void sendThreadInfoRequest();
+
 public slots:
     void onReportPaperStatus(bool status);
     void onReportNetMode(ats_net_mode_t mode);
     void onReportNetStatus(bool status);
     void onReportWifiModuleStatus(bool status);
+
+signals:
+    void threadInfoReceived(const QVector<RpcProtocol::ThreadInfoEntry> &entries);
 
 private slots:
     void onSockRecvFinished(quint8 service, quint8 command, int sock, int received, QByteArray data, quint8 requestId);
@@ -63,4 +66,5 @@ private:
     QThread *m_netThread = nullptr;
     RpcNetWorker *m_netWorker = nullptr;
     quint8 m_currentRequestId = 0;
+    quint8 m_hostRequestId = 0;
 };

@@ -104,6 +104,21 @@ void RpcFrameProcessor::dispatchFrame(const RpcProtocol::Frame &frame)
     }
 }
 
+void RpcFrameProcessor::sendThreadInfoRequest()
+{
+    m_hostRequestId++;
+    if (m_hostRequestId == 0U)
+        m_hostRequestId = 1U;
+
+    const QByteArray frame = RpcProtocol::buildRequestFrame(
+        RpcProtocol::kServiceCore,
+        RpcProtocol::kCoreCommandGetThreadInfo,
+        m_hostRequestId);
+
+    QMetaObject::invokeMethod(m_server, "writeFrame",
+        Qt::QueuedConnection, Q_ARG(QByteArray, frame));
+}
+
 void RpcFrameProcessor::postResponse(const QByteArray &frame)
 {
     QMetaObject::invokeMethod(m_server, "onProcessorWriteResponse",
@@ -263,6 +278,14 @@ void RpcFrameProcessor::handleCoreFrame(const RpcProtocol::Frame &frame)
             }
             return;
         }
+    }
+
+    if (RpcProtocol::isCoreResponse(frame, RpcProtocol::kCoreCommandGetThreadInfo)) {
+        QVector<RpcProtocol::ThreadInfoEntry> entries;
+        if (RpcProtocol::decodeThreadInfoResponse(frame, &entries)) {
+            emit threadInfoReceived(entries);
+        }
+        return;
     }
 
     if (frame.frameType != RpcProtocol::kFrameTypeRequest)

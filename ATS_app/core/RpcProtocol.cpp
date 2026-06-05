@@ -94,6 +94,25 @@ static bool decodeRleWords(const QByteArray &encodedData, int expectedWordCount,
     return offset == encodedData.size() && decodedWords->size() == expectedWordCount;
 }
 
+QByteArray buildRequestFrame(quint8 service, quint8 command, quint8 requestId,
+                              const QByteArray &payload)
+{
+    const int dataLength = payload.size();
+
+    QByteArray frame;
+    frame.reserve(kHeaderSize + dataLength);
+    frame.append(static_cast<char>(kSof0));
+    frame.append(static_cast<char>(kSof1));
+    frame.append(static_cast<char>(kFrameTypeRequest));
+    frame.append(static_cast<char>(service));
+    frame.append(static_cast<char>(command));
+    frame.append(static_cast<char>(requestId));
+    frame.append(static_cast<char>(dataLength & 0xFF));
+    frame.append(static_cast<char>((dataLength >> 8) & 0xFF));
+    frame.append(payload);
+    return frame;
+}
+
 QByteArray buildResponseFrame(quint8 service, quint8 command, quint8 requestId,
                               const QByteArray &payload)
 {
@@ -469,4 +488,44 @@ bool isReaderRequest(const Frame &frame, quint8 expectedCommand)
            frame.service == kServiceReader &&
            frame.command == expectedCommand;
 }
+
+bool isCoreResponse(const Frame &frame, quint8 expectedCommand)
+{
+    return frame.frameType == kFrameTypeResponse &&
+           frame.service == kServiceCore &&
+           frame.command == expectedCommand;
+}
+
+bool decodeThreadInfoResponse(const Frame &frame, QVector<ThreadInfoEntry> *entries)
+{
+    if (!entries ||
+        !isCoreResponse(frame, kCoreCommandGetThreadInfo)) {
+        return false;
+    }
+
+    entries->clear();
+
+    const QString raw = QString::fromUtf8(frame.payload);
+    const QStringList lines = raw.split('\n', Qt::SkipEmptyParts);
+
+    for (const QString &line : lines) {
+        const QStringList parts = line.split(',');
+        if (parts.size() < 3)
+            continue;
+
+        ThreadInfoEntry entry;
+        entry.name = parts[0].trimmed();
+        bool ok1 = false, ok2 = false;
+        entry.remainingBytes = parts[1].trimmed().toUInt(&ok1);
+        entry.stackSize = parts[2].trimmed().toUInt(&ok2);
+
+        if (!ok1 || !ok2 || entry.stackSize == 0U)
+            continue;
+
+        entries->append(entry);
+    }
+
+    return !entries->isEmpty();
+}
+
 }

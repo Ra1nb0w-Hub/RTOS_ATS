@@ -3,6 +3,7 @@
 #include <QByteArray>
 #include <QString>
 #include <QVector>
+#include <QMetaType>
 
 namespace RpcProtocol
 {
@@ -24,6 +25,7 @@ static constexpr quint8 kCoreCommandWriteLog = 1;
 static constexpr quint8 kCoreCommandCrash = 2;
 static constexpr quint8 kCoreCommandGetTimestamp = 3;
 static constexpr quint8 kCoreCommandGetSerialNumber = 4;
+static constexpr quint8 kCoreCommandGetThreadInfo = 5;
 
 static constexpr quint8 kLcdCommandInit = 1;
 static constexpr quint8 kLcdCommandDrawRectangle = 2;
@@ -177,13 +179,23 @@ struct CrashEvent
     quint32 mmfar = 0;
 };
 
+struct ThreadInfoEntry
+{
+    QString name;
+    quint32 remainingBytes = 0;
+    quint32 stackSize = 0;
+};
+
+QByteArray buildRequestFrame(quint8 service, quint8 command, quint8 requestId, const QByteArray &payload = QByteArray());
 QByteArray buildResponseFrame(quint8 service, quint8 command, quint8 requestId, const QByteArray &payload = QByteArray());
 QByteArray buildEventFrame(quint8 service, quint8 command, const QByteArray &payload = QByteArray());
 
 bool tryExtractFrame(QByteArray *buffer, Frame *frame);
 bool decodeLogEvent(const Frame &frame, LogEvent *event);
 bool decodeCrashEvent(const Frame &frame, CrashEvent *event);
+bool decodeThreadInfoResponse(const Frame &frame, QVector<ThreadInfoEntry> *entries);
 bool isCoreRequest(const Frame &frame, quint8 expectedCommand);
+bool isCoreResponse(const Frame &frame, quint8 expectedCommand);
 bool isLcdEvent(const Frame &frame);
 bool decodeLcdInitEvent(const Frame &frame, LcdInitEvent *event);
 bool decodeLcdRectEvent(const Frame &frame, quint8 expectedCommand, LcdRectEvent *event);
@@ -199,3 +211,5 @@ bool isNetRequest(const Frame &frame, quint8 expectedCommand);
 bool isAudioRequest(const Frame &frame, quint8 expectedCommand);
 bool isReaderRequest(const Frame &frame, quint8 expectedCommand);
 }
+
+Q_DECLARE_METATYPE(RpcProtocol::ThreadInfoEntry)

@@ -7,6 +7,7 @@
 #include "StatusPanel.h"
 #include "LogPanel.h"
 #include "ReceiptPanel.h"
+#include "ThreadMonitorPanel.h"
 #include "core/TestRunner.h"
 #include "core/AppThread.h"
 #include "log/LogManager.h"
@@ -39,6 +40,7 @@ private slots:
 
     void onImportConfig();
     void onImportElf();
+    void onOpenThreadMonitor();
 
 private:
     void setupUi();
@@ -62,9 +64,11 @@ protected:
     StatusPanel    *m_statusPanel = nullptr;
     LogPanel       *m_logPanel = nullptr;
     ReceiptPanel   *m_receiptPanel = nullptr;
+    ThreadMonitorPanel *m_threadMonitorPanel = nullptr;
 
     bool         m_appStarted = false;
     bool         m_closePending = false;
     QString      m_importedElfPath;
     QAction     *m_actionImportElf = nullptr;
+    QAction     *m_actionThreadMonitor = nullptr;
 };

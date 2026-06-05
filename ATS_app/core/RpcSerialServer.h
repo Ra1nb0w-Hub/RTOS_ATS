@@ -31,6 +31,9 @@ signals:
     void logMessage(const QString &msg, const QString &level);
     void crashMessage(const QString &msg);
 
+public slots:
+    void writeFrame(const QByteArray &frame);
+
 private slots:
     void onNewConnection();
     void onSocketReadyRead();

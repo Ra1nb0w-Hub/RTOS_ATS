@@ -70,6 +70,13 @@ RpcFrameProcessor *RpcSerialServer::processor() const
     return m_processor;
 }
 
+void RpcSerialServer::writeFrame(const QByteArray &frame)
+{
+    if (m_client && m_client->isOpen()) {
+        m_client->write(frame);
+    }
+}
+
 void RpcSerialServer::setElfPath(const QString &path)
 {
     m_elfPath = path;

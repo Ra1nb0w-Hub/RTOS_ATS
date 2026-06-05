@@ -146,12 +146,15 @@ void MainWindow::setupToolBar()
     toolBar->setMovable(false);
 
     m_actionImportElf = toolBar->addAction(QStringLiteral("导入ELF文件"));
+
+    m_actionThreadMonitor = toolBar->addAction(QStringLiteral("线程监控"));
 }
 
 void MainWindow::connectSignals()
 {
     connect(m_testCasesPanel->ui()->btnImportConfig, &QPushButton::clicked, this, &MainWindow::onImportConfig);
     connect(m_actionImportElf, &QAction::triggered, this, &MainWindow::onImportElf);
+    connect(m_actionThreadMonitor, &QAction::triggered, this, &MainWindow::onOpenThreadMonitor);
 
     connect(m_testCasesPanel, &TestCasesPanel::runScriptsRequested, this, [this](const QMap<QString, QString> &scripts) {
         if (scripts.isEmpty()) {
@@ -300,6 +303,24 @@ void MainWindow::onImportElf()
 
     m_importedElfPath = elfInfo.absoluteFilePath();
     settings.setValue(QString::fromLatin1(kRecentElfDirectoryKey), elfInfo.absolutePath());
+}
+
+void MainWindow::onOpenThreadMonitor()
+{
+    if (m_threadMonitorPanel) {
+        m_threadMonitorPanel->stopMonitoring();
+        m_threadMonitorPanel->close();  // WA_DeleteOnClose will delete it
+        return;
+    }
+
+    m_threadMonitorPanel = new ThreadMonitorPanel(this);
+    m_threadMonitorPanel->setAttribute(Qt::WA_DeleteOnClose);
+    connect(m_threadMonitorPanel, &QObject::destroyed, this, [this](QObject *) {
+        m_threadMonitorPanel = nullptr;
+    });
+
+    m_threadMonitorPanel->startMonitoring(m_serialServer->processor());
+    m_threadMonitorPanel->show();
 }
 
 void MainWindow::resizeEvent(QResizeEvent *event)
