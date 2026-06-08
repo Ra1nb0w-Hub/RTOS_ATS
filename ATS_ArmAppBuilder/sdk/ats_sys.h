@@ -169,6 +169,16 @@ int ats_thread_sleep(unsigned int ms);
 int ats_thread_info(char *buffer, size_t buffer_size);
 
 /**
+ * @brief 获取堆区内存使用信息
+ * 
+ * @param used 输出已使用字节数
+ * @param total 输出总字节数
+ * 
+ * @return 0:成功 <0:失败
+ */
+int ats_heap_info(uint32_t *used, uint32_t *total);
+
+/**
  * @brief 创建互斥锁
  * 
  * @param handle 输出互斥锁句柄

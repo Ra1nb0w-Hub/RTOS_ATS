@@ -169,10 +169,15 @@ bool QemuController::start(quint16 serialPort)
               << QString::fromLatin1(kDefaultCpuType)
               << QStringLiteral("-nographic")
               << QStringLiteral("-qmp")
-              << QStringLiteral("tcp:127.0.0.1:%1,server=on,wait=off").arg(m_qmpPort)
-              << QStringLiteral("-serial")
-              << QStringLiteral("tcp:127.0.0.1:%1").arg(serialPort)
-              << QStringLiteral("-kernel")
+              << QStringLiteral("tcp:127.0.0.1:%1,server=on,wait=off").arg(m_qmpPort);
+
+    /* 4 serial ports for multi-channel RPC */
+    for (quint16 i = 0; i < 4; ++i) {
+        arguments << QStringLiteral("-serial")
+                  << QStringLiteral("tcp:127.0.0.1:%1").arg(serialPort + i);
+    }
+
+    arguments << QStringLiteral("-kernel")
               << QDir::toNativeSeparators(firmwareInfo.absoluteFilePath())
               << QStringLiteral("-icount")
               << icountMode;
@@ -223,9 +228,8 @@ bool QemuController::isRunning() const
 
 void QemuController::onProcessStarted()
 {
-    emitLog(QStringLiteral("QEMU 已启动，端口信息：serial=%1, qmp=%2")
-                .arg(m_serialPort)
-                .arg(m_qmpPort),
+    emitLog(QStringLiteral("QEMU 已启动，端口信息：serial=%1~%2, qmp=%3")
+                .arg(m_serialPort).arg(m_serialPort+3).arg(m_qmpPort),
             QStringLiteral("SYS"));
     emit started();
 }

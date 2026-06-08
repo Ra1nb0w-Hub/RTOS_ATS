@@ -11,6 +11,9 @@
 // Qt Charts forward declarations (Qt 5 compatible, no namespace)
 class QChart;
 class QChartView;
+class QGraphicsSimpleTextItem;
+class QGridLayout;
+class QLabel;
 class QLineSeries;
 class QValueAxis;
 
@@ -39,6 +42,7 @@ private slots:
 private:
     void setupChart();
     void clearData();
+    void rebuildLegend();
 
     RpcFrameProcessor *m_processor = nullptr;
     QTimer *m_timer = nullptr;
@@ -53,6 +57,23 @@ private:
     QMap<QString, QVector<QPointF>> m_threadData;
     // Per-thread series
     QMap<QString, QLineSeries *> m_threadSeries;
+    // Per-thread text labels (shows latest value at end of line)
+    QMap<QString, QGraphicsSimpleTextItem *> m_threadLabels;
+
+    // Custom legend (5 items per row)
+    QWidget *m_legendWidget = nullptr;
+    QGridLayout *m_legendLayout = nullptr;
+    // Heap series and data (same chart as threads)
+    QLineSeries *m_heapSeries = nullptr;
+    QVector<QPointF> m_heapData;
+    // Per-thread legend info: name -> {color, label widget}
+    struct LegendItem {
+        QColor color;
+        QString text;
+        QWidget *widget = nullptr;
+    };
+    QMap<QString, LegendItem> m_legendItems;
+    static constexpr int kLegendColumns = 5;
 
     // Color palette for threads
     QList<QColor> m_colorPalette;

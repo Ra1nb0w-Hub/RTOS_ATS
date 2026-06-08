@@ -145,7 +145,7 @@ void MainWindow::setupToolBar()
     toolBar->setObjectName(QStringLiteral("AtsToolBar"));
     toolBar->setMovable(false);
 
-    m_actionImportElf = toolBar->addAction(QStringLiteral("导入ELF文件"));
+    m_actionImportElf = toolBar->addAction(QStringLiteral("选择固件"));
 
     m_actionThreadMonitor = toolBar->addAction(QStringLiteral("线程监控"));
 }
@@ -200,7 +200,7 @@ void MainWindow::connectSignals()
 void MainWindow::startQemuWithImportedElf()
 {
     if (m_importedElfPath.isEmpty()) {
-        m_logPanel->appendLog("请先导入 ELF 文件。", "WARN");
+        m_logPanel->appendLog("请先选择固件。", "WARN");
         return;
     }
 
@@ -273,7 +273,7 @@ void MainWindow::onImportElf()
     static const char kRecentElfDirectoryKey[] = "paths/recentElfDirectory";
 
     if (m_appStarted || m_qemuController->isRunning()) {
-        QMessageBox::information(this, "提示", "应用程序运行中，无法重新导入 ELF 文件");
+        QMessageBox::information(this, "提示", "应用程序运行中，无法重新选择固件");
         return;
     }
 
@@ -287,7 +287,7 @@ void MainWindow::onImportElf()
 
     const QString filePath = QFileDialog::getOpenFileName(
         this,
-        "导入 ELF 文件",
+        "选择 ELF 固件文件",
         initialDirectory,
         "ELF Files (*.elf *.axf *.out);;All Files (*)");
 

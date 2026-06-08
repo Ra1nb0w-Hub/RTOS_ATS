@@ -11,6 +11,8 @@ namespace RpcProtocol
 struct Frame;
 }
 
+static constexpr quint8 kRpcChannelCount = 4;
+
 class RpcSerialServer : public QObject
 {
     Q_OBJECT
@@ -19,7 +21,7 @@ public:
     explicit RpcSerialServer(QObject *parent = nullptr);
     ~RpcSerialServer() override;
 
-    bool start(quint16 port);
+    bool start(quint16 basePort);
     void stop();
     quint16 listenPort() const;
     bool isListening() const;
@@ -32,22 +34,27 @@ signals:
     void crashMessage(const QString &msg);
 
 public slots:
-    void writeFrame(const QByteArray &frame);
+    void writeFrame(const QByteArray &frame, quint8 channel);
 
 private slots:
-    void onNewConnection();
-    void onSocketReadyRead();
-    void onSocketDisconnected();
-    void onProcessorWriteResponse(QByteArray frame);
+    void onNewConnection(int channel);
+    void onSocketReadyRead(int channel);
+    void onSocketDisconnected(int channel);
 
 private:
-    void closeClient();
-    void processIncomingData();
+    struct ChannelState
+    {
+        QTcpServer *server = nullptr;
+        QTcpSocket *client = nullptr;
+        QByteArray rxBuffer;
+    };
 
-    QTcpServer *m_server = nullptr;
-    QTcpSocket *m_client = nullptr;
-    QByteArray m_rxBuffer;
+    void closeClient(int channel);
+    void processIncomingData(int channel);
+
+    ChannelState m_channels[kRpcChannelCount];
     QString m_elfPath;
+    quint16 m_basePort = 0;
 
     QThread *m_workerThread = nullptr;
     RpcFrameProcessor *m_processor = nullptr;

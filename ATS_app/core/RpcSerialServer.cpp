@@ -9,11 +9,16 @@
 
 #include "RpcFrameProcessor.h"
 
+static const char *kChannelNames[] = {"CTRL", "DISP", "DATA", "LOG"};
+
 RpcSerialServer::RpcSerialServer(QObject *parent)
     : QObject(parent)
-    , m_server(new QTcpServer(this))
 {
-    connect(m_server, &QTcpServer::newConnection, this, &RpcSerialServer::onNewConnection);
+    for (int i = 0; i < kRpcChannelCount; ++i) {
+        m_channels[i].server = new QTcpServer(this);
+        connect(m_channels[i].server, &QTcpServer::newConnection,
+                this, [this, i]() { onNewConnection(i); });
+    }
 
     m_workerThread = new QThread(this);
     m_processor = new RpcFrameProcessor(this);
@@ -33,36 +38,52 @@ RpcSerialServer::~RpcSerialServer()
     m_processor = nullptr;
 }
 
-bool RpcSerialServer::start(quint16 port)
+bool RpcSerialServer::start(quint16 basePort)
 {
-    if (m_server->isListening()) {
+    if (isListening()) {
         return true;
     }
 
-    if (!m_server->listen(QHostAddress::LocalHost, port)) {
-        LogManager::logError(QString("RPC监听失败: %1").arg(m_server->errorString()));
-        return false;
+    for (int i = 0; i < kRpcChannelCount; ++i) {
+        const quint16 port = basePort + static_cast<quint16>(i);
+        if (!m_channels[i].server->listen(QHostAddress::LocalHost, port)) {
+            LogManager::logError(QString("RPC 通道 %1 监听失败(端口 %2): %3")
+                                    .arg(kChannelNames[i])
+                                    .arg(port)
+                                    .arg(m_channels[i].server->errorString()));
+            stop();
+            return false;
+        }
     }
 
+    m_basePort = basePort;
     return true;
 }
 
 void RpcSerialServer::stop()
 {
-    closeClient();
-    if (m_server->isListening()) {
-        m_server->close();
+    for (int i = 0; i < kRpcChannelCount; ++i) {
+        closeClient(i);
+        if (m_channels[i].server->isListening()) {
+            m_channels[i].server->close();
+        }
     }
+    m_basePort = 0;
 }
 
 quint16 RpcSerialServer::listenPort() const
 {
-    return m_server->serverPort();
+    return m_basePort;
 }
 
 bool RpcSerialServer::isListening() const
 {
-    return m_server->isListening();
+    for (int i = 0; i < kRpcChannelCount; ++i) {
+        if (m_channels[i].server->isListening()) {
+            return true;
+        }
+    }
+    return false;
 }
 
 RpcFrameProcessor *RpcSerialServer::processor() const
@@ -70,10 +91,15 @@ RpcFrameProcessor *RpcSerialServer::processor() const
     return m_processor;
 }
 
-void RpcSerialServer::writeFrame(const QByteArray &frame)
+void RpcSerialServer::writeFrame(const QByteArray &frame, quint8 channel)
 {
-    if (m_client && m_client->isOpen()) {
-        m_client->write(frame);
+    if (channel >= kRpcChannelCount) {
+        return;
+    }
+
+    QTcpSocket *client = m_channels[channel].client;
+    if (client && client->isOpen()) {
+        client->write(frame);
     }
 }
 
@@ -84,73 +110,73 @@ void RpcSerialServer::setElfPath(const QString &path)
         m_processor->setElfPath(path);
 }
 
-void RpcSerialServer::onNewConnection()
+void RpcSerialServer::onNewConnection(int channel)
 {
-    QTcpSocket *newClient = m_server->nextPendingConnection();
+    QTcpServer *server = m_channels[channel].server;
+    QTcpSocket *newClient = server->nextPendingConnection();
     if (!newClient) {
         return;
     }
 
-    if (m_client) {
+    if (m_channels[channel].client) {
         newClient->disconnectFromHost();
         newClient->deleteLater();
-        LogManager::logWarn("串口已有活动连接, 拒绝新的串口连接");
+        LogManager::logWarn(QString("RPC 通道 %1 已有活动连接, 拒绝新连接").arg(kChannelNames[channel]));
         return;
     }
 
-    m_client = newClient;
-    m_rxBuffer.clear();
+    m_channels[channel].client = newClient;
+    m_channels[channel].rxBuffer.clear();
 
-    connect(m_client, &QTcpSocket::readyRead, this, &RpcSerialServer::onSocketReadyRead);
-    connect(m_client, &QTcpSocket::disconnected, this, &RpcSerialServer::onSocketDisconnected);
+    connect(newClient, &QTcpSocket::readyRead,
+            this, [this, channel]() { onSocketReadyRead(channel); });
+    connect(newClient, &QTcpSocket::disconnected,
+            this, [this, channel]() { onSocketDisconnected(channel); });
 
-    LogManager::logSys(QString("串口客户端已连接: %1:%2")
-                           .arg(m_client->peerAddress().toString())
-                           .arg(m_client->peerPort()));
+    LogManager::logSys(QString("RPC 通道 %1 客户端已连接: %2:%3")
+                           .arg(kChannelNames[channel])
+                           .arg(newClient->peerAddress().toString())
+                           .arg(newClient->peerPort()));
 }
 
-void RpcSerialServer::onSocketReadyRead()
+void RpcSerialServer::onSocketReadyRead(int channel)
 {
-    if (!m_client) {
+    QTcpSocket *client = m_channels[channel].client;
+    if (!client) {
         return;
     }
 
-    m_rxBuffer.append(m_client->readAll());
-    processIncomingData();
+    m_channels[channel].rxBuffer.append(client->readAll());
+    processIncomingData(channel);
 }
 
-void RpcSerialServer::onSocketDisconnected()
+void RpcSerialServer::onSocketDisconnected(int channel)
 {
-    LogManager::logSys("串口客户端已断开");
-    closeClient();
+    LogManager::logSys(QString("RPC 通道 %1 客户端已断开").arg(kChannelNames[channel]));
+    closeClient(channel);
 }
 
-void RpcSerialServer::closeClient()
+void RpcSerialServer::closeClient(int channel)
 {
-    if (!m_client) {
+    QTcpSocket *client = m_channels[channel].client;
+    if (!client) {
         return;
     }
 
-    m_client->deleteLater();
-    m_client = nullptr;
-    m_rxBuffer.clear();
+    client->deleteLater();
+    m_channels[channel].client = nullptr;
+    m_channels[channel].rxBuffer.clear();
 }
 
-void RpcSerialServer::processIncomingData()
+void RpcSerialServer::processIncomingData(int channel)
 {
     RpcProtocol::Frame frame;
 
-    while (RpcProtocol::tryExtractFrame(&m_rxBuffer, &frame)) {
+    while (RpcProtocol::tryExtractFrame(&m_channels[channel].rxBuffer, &frame)) {
         QString elfPath = m_elfPath;
-        QMetaObject::invokeMethod(m_processor, [this, frame, elfPath]() {
+        QMetaObject::invokeMethod(m_processor, [this, frame, elfPath, channel]() {
             m_processor->setElfPath(elfPath);
-            m_processor->dispatchFrame(frame);
+            m_processor->dispatchFrame(frame, static_cast<quint8>(channel));
         }, Qt::QueuedConnection);
     }
-}
-
-void RpcSerialServer::onProcessorWriteResponse(QByteArray frame)
-{
-    if (m_client)
-        m_client->write(frame);
 }

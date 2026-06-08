@@ -14,6 +14,16 @@ extern "C" {
 
 typedef enum
 {
+    ATS_RPC_CHANNEL_CTRL = 0,
+    ATS_RPC_CHANNEL_DISPLAY = 1,
+    ATS_RPC_CHANNEL_DATA = 2,
+    ATS_RPC_CHANNEL_LOG = 3,
+
+    ATS_RPC_CHANNEL_COUNT
+} ats_rpc_channel_t;
+
+typedef enum
+{
     ATS_RPC_FRAME_TYPE_REQUEST = 1,
     ATS_RPC_FRAME_TYPE_RESPONSE = 2,
     ATS_RPC_FRAME_TYPE_EVENT = 3

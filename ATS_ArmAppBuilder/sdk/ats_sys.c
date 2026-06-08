@@ -369,6 +369,21 @@ int ats_thread_info(char *buffer, size_t buffer_size)
     return ATS_EC_OK;
 }
 
+int ats_heap_info(uint32_t *used, uint32_t *total)
+{
+    if ((used == NULL) || (total == NULL))
+    {
+        return ATS_EC_INVALID_PARAM;
+    }
+
+    size_t free_bytes = xPortGetFreeHeapSize();
+
+    *total = (uint32_t)configTOTAL_HEAP_SIZE;
+    *used = (uint32_t)(configTOTAL_HEAP_SIZE - free_bytes);
+
+    return ATS_EC_OK;
+}
+
 int ats_mutex_create(ats_mutex_handle_t *handle, const char *name)
 {
     SemaphoreHandle_t mutex;

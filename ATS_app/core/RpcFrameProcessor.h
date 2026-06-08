@@ -25,7 +25,7 @@ public:
     ~RpcFrameProcessor() override;
 
     void setElfPath(const QString &path);
-    void dispatchFrame(const RpcProtocol::Frame &frame);
+    void dispatchFrame(const RpcProtocol::Frame &frame, quint8 channel);
 
     void sendThreadInfoRequest();
 
@@ -39,11 +39,11 @@ signals:
     void threadInfoReceived(const QVector<RpcProtocol::ThreadInfoEntry> &entries);
 
 private slots:
-    void onSockRecvFinished(quint8 service, quint8 command, int sock, int received, QByteArray data, quint8 requestId);
-    void onSockConnectFinished(quint8 service, quint8 command, int sock, int ret, quint8 requestId);
+    void onSockRecvFinished(quint8 service, quint8 command, int sock, int received, QByteArray data, quint8 requestId, quint8 channel);
+    void onSockConnectFinished(quint8 service, quint8 command, int sock, int ret, quint8 requestId, quint8 channel);
 
 private:
-    void postResponse(const QByteArray &frame);
+    void postResponse(const QByteArray &frame, quint8 channel);
     void postLog(const QString &msg, const QString &level);
     void postCrash(const QString &msg);
 
@@ -66,5 +66,6 @@ private:
     QThread *m_netThread = nullptr;
     RpcNetWorker *m_netWorker = nullptr;
     quint8 m_currentRequestId = 0;
+    quint8 m_currentChannel = 0;
     quint8 m_hostRequestId = 0;
 };

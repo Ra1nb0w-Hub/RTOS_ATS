@@ -9,13 +9,20 @@
 #include "FreeRTOS/semphr.h"
 #include "FreeRTOS/task.h"
 #include <string.h>
+#include <stdio.h>
 
 #define ATS_RPC_MAX_PENDING        4U
 
 /* ------------------------------------------------------------------
- *  UART definitions
+ *  UART definitions — 4 channels
  * ------------------------------------------------------------------ */
-#define ATS_UART_BASE              0x40004000UL
+static const uint32_t s_uart_base[ATS_RPC_CHANNEL_COUNT] = {
+    0x40004000UL,  /* CH0: CTRL     */
+    0x40005000UL,  /* CH1: DISPLAY  */
+    0x40006000UL,  /* CH2: DATA     */
+    0x40007000UL   /* CH3: LOG      */
+};
+
 #define ATS_UART_DATA_OFFSET       0x000UL
 #define ATS_UART_STATE_OFFSET      0x004UL
 #define ATS_UART_CTRL_OFFSET       0x008UL
@@ -29,6 +36,37 @@
 #define ATS_UART_TX_FIFO_DEPTH     16U
 #define ATS_UART_BAUD_RATE         4608000UL
 #define ATS_UART_BAUD_DIVISOR      (ATS_CPU_CLOCK_HZ / ATS_UART_BAUD_RATE)
+
+/* ------------------------------------------------------------------
+ *  channel routing — service+command → UART channel
+ * ------------------------------------------------------------------ */
+static ats_rpc_channel_t get_channel(uint8_t service, uint8_t command)
+{
+    /* Core WriteLog → dedicated log channel */
+    if (service == ATS_RPC_SERVICE_CORE && command == ATS_RPC_CORE_WRITE_LOG)
+    {
+        return ATS_RPC_CHANNEL_LOG;
+    }
+
+    switch (service)
+    {
+    case ATS_RPC_SERVICE_CORE:
+    case ATS_RPC_SERVICE_PRINTER:
+    case ATS_RPC_SERVICE_AUDIO:
+    case ATS_RPC_SERVICE_READER:
+        return ATS_RPC_CHANNEL_CTRL;
+
+    case ATS_RPC_SERVICE_LCD:
+        return ATS_RPC_CHANNEL_DISPLAY;
+
+    case ATS_RPC_SERVICE_NET:
+    case ATS_RPC_SERVICE_FS:
+        return ATS_RPC_CHANNEL_DATA;
+
+    default:
+        return ATS_RPC_CHANNEL_CTRL;
+    }
+}
 
 /* ------------------------------------------------------------------
  *  pending request / service handler tables
@@ -53,9 +91,11 @@ static ats_rpc_pending_t          s_pending[ATS_RPC_MAX_PENDING];
 static ats_rpc_handler_t          s_handlers[ATS_RPC_MAX_SERVICES];
 static bool                       s_rpc_initialized = false;
 static uint8_t                    s_request_id_counter = 0U;
+static SemaphoreHandle_t          s_pending_mutex = NULL;
+static SemaphoreHandle_t          s_tx_mutex[ATS_RPC_CHANNEL_COUNT] = {NULL};
 
 /* ------------------------------------------------------------------
- *  UART low-level helpers
+ *  UART low-level helpers (base address per channel)
  * ------------------------------------------------------------------ */
 static volatile uint32_t *uart_reg(uint32_t base, uint32_t offset)
 {
@@ -72,41 +112,46 @@ static void uart_write(uint32_t base, uint32_t offset, uint32_t value)
     *uart_reg(base, offset) = value;
 }
 
-static void uart_init_tx(void)
+static void uart_init_tx(ats_rpc_channel_t channel)
 {
-    uint32_t ctrl = uart_read(ATS_UART_BASE, ATS_UART_CTRL_OFFSET);
-    uart_write(ATS_UART_BASE, ATS_UART_BAUDDIV_OFFSET, ATS_UART_BAUD_DIVISOR);
-    uart_write(ATS_UART_BASE, ATS_UART_CTRL_OFFSET, ctrl | ATS_UART_CTRL_TX_EN);
+    const uint32_t base = s_uart_base[channel];
+    const uint32_t ctrl = uart_read(base, ATS_UART_CTRL_OFFSET);
+    uart_write(base, ATS_UART_BAUDDIV_OFFSET, ATS_UART_BAUD_DIVISOR);
+    uart_write(base, ATS_UART_CTRL_OFFSET, ctrl | ATS_UART_CTRL_TX_EN);
 }
 
-static void uart_init_rx(void)
+static void uart_init_rx(ats_rpc_channel_t channel)
 {
-    uint32_t ctrl = uart_read(ATS_UART_BASE, ATS_UART_CTRL_OFFSET);
-    uart_write(ATS_UART_BASE, ATS_UART_BAUDDIV_OFFSET, ATS_UART_BAUD_DIVISOR);
-    uart_write(ATS_UART_BASE, ATS_UART_CTRL_OFFSET, ctrl | ATS_UART_CTRL_TX_EN | ATS_UART_CTRL_RX_EN);
+    const uint32_t base = s_uart_base[channel];
+    const uint32_t ctrl = uart_read(base, ATS_UART_CTRL_OFFSET);
+    uart_write(base, ATS_UART_BAUDDIV_OFFSET, ATS_UART_BAUD_DIVISOR);
+    uart_write(base, ATS_UART_CTRL_OFFSET, ctrl | ATS_UART_CTRL_TX_EN | ATS_UART_CTRL_RX_EN);
 }
 
-static bool uart_try_read_byte(uint8_t *byte)
+static bool uart_try_read_byte(ats_rpc_channel_t channel, uint8_t *byte)
 {
+    const uint32_t base = s_uart_base[channel];
+
     if (byte == NULL)
     {
         return false;
     }
 
-    if ((uart_read(ATS_UART_BASE, ATS_UART_STATE_OFFSET) & ATS_UART_STATE_RXFULL) == 0U)
+    if ((uart_read(base, ATS_UART_STATE_OFFSET) & ATS_UART_STATE_RXFULL) == 0U)
     {
         return false;
     }
 
-    *byte = (uint8_t)(uart_read(ATS_UART_BASE, ATS_UART_DATA_OFFSET) & 0xFFU);
+    *byte = (uint8_t)(uart_read(base, ATS_UART_DATA_OFFSET) & 0xFFU);
     return true;
 }
 
 /* ------------------------------------------------------------------
- *  transport write — UART
+ *  transport write — with per-channel TX mutex
  * ------------------------------------------------------------------ */
-static int ats_rpc_transport_write(const uint8_t *data, uint16_t length)
+static int ats_rpc_transport_write(ats_rpc_channel_t channel, const uint8_t *data, uint16_t length)
 {
+    const uint32_t base = s_uart_base[channel];
     uint16_t index;
     uint16_t batch;
 
@@ -115,31 +160,68 @@ static int ats_rpc_transport_write(const uint8_t *data, uint16_t length)
         return ATS_EC_INVALID_PARAM;
     }
 
-    uart_init_tx();
+    if (s_tx_mutex[channel] != NULL)
+    {
+        (void)xSemaphoreTake(s_tx_mutex[channel], portMAX_DELAY);
+    }
+
+    uart_init_tx(channel);
 
     index = 0U;
     while (index < length)
     {
-        while (uart_read(ATS_UART_BASE, ATS_UART_STATE_OFFSET) & ATS_UART_STATE_TXFULL)
+        while (uart_read(base, ATS_UART_STATE_OFFSET) & ATS_UART_STATE_TXFULL)
         {
         }
 
         batch = 0U;
         while ((batch < ATS_UART_TX_FIFO_DEPTH) && (index < length))
         {
-            uart_write(ATS_UART_BASE, ATS_UART_DATA_OFFSET, (uint32_t)data[index]);
+            uart_write(base, ATS_UART_DATA_OFFSET, (uint32_t)data[index]);
             ++index;
             ++batch;
         }
+    }
+
+    if (s_tx_mutex[channel] != NULL)
+    {
+        (void)xSemaphoreGive(s_tx_mutex[channel]);
     }
 
     return ATS_EC_OK;
 }
 
 /* ------------------------------------------------------------------
+ *  transport write direct — no mutex (for crash/ISR context)
+ * ------------------------------------------------------------------ */
+static void ats_rpc_transport_write_direct(ats_rpc_channel_t channel, const uint8_t *data, uint16_t length)
+{
+    const uint32_t base = s_uart_base[channel];
+    uint16_t index = 0U;
+    uint16_t batch;
+
+    uart_init_tx(channel);
+
+    while (index < length)
+    {
+        while (uart_read(base, ATS_UART_STATE_OFFSET) & ATS_UART_STATE_TXFULL)
+        {
+        }
+
+        batch = 0U;
+        while ((batch < ATS_UART_TX_FIFO_DEPTH) && (index < length))
+        {
+            uart_write(base, ATS_UART_DATA_OFFSET, (uint32_t)data[index]);
+            ++index;
+            ++batch;
+        }
+    }
+}
+
+/* ------------------------------------------------------------------
  *  transport read — UART
  * ------------------------------------------------------------------ */
-static int ats_rpc_transport_read(uint8_t *byte, uint32_t timeout_ms)
+static int ats_rpc_transport_read(ats_rpc_channel_t channel, uint8_t *byte, uint32_t timeout_ms)
 {
     uint32_t     start_tick = 0U;
     BaseType_t   scheduler_state;
@@ -149,7 +231,7 @@ static int ats_rpc_transport_read(uint8_t *byte, uint32_t timeout_ms)
         return ATS_EC_INVALID_PARAM;
     }
 
-    uart_init_rx();
+    uart_init_rx(channel);
 
     scheduler_state = xTaskGetSchedulerState();
     if (scheduler_state != taskSCHEDULER_NOT_STARTED)
@@ -159,7 +241,7 @@ static int ats_rpc_transport_read(uint8_t *byte, uint32_t timeout_ms)
 
     for (;;)
     {
-        if (uart_try_read_byte(byte))
+        if (uart_try_read_byte(channel, byte))
         {
             return ATS_EC_OK;
         }
@@ -216,7 +298,7 @@ uint32_t ats_rpc_read_u32_le(const uint8_t *buffer)
     return (uint32_t)buffer[0] | ((uint32_t)buffer[1] << 8) | ((uint32_t)buffer[2] << 16) | ((uint32_t)buffer[3] << 24);
 }
 
-static int read_exact(uint8_t *buffer, uint16_t length, uint32_t timeout_ms)
+static int read_exact(ats_rpc_channel_t channel, uint8_t *buffer, uint16_t length, uint32_t timeout_ms)
 {
     uint16_t index;
 
@@ -227,7 +309,7 @@ static int read_exact(uint8_t *buffer, uint16_t length, uint32_t timeout_ms)
 
     for (index = 0U; index < length; ++index)
     {
-        const int status = ats_rpc_transport_read(&buffer[index], timeout_ms);
+        const int status = ats_rpc_transport_read(channel, &buffer[index], timeout_ms);
         if (status != ATS_EC_OK)
         {
             return status;
@@ -240,6 +322,7 @@ static int read_exact(uint8_t *buffer, uint16_t length, uint32_t timeout_ms)
 static int send_frame(uint8_t frame_type, uint8_t service, uint8_t command, uint8_t request_id, const uint8_t *payload, uint16_t payload_length)
 {
     const uint16_t frame_length = (uint16_t)(ATS_RPC_HEADER_SIZE + payload_length);
+    const ats_rpc_channel_t channel = get_channel(service, command);
     uint8_t *frame_buffer;
     int status;
 
@@ -272,12 +355,12 @@ static int send_frame(uint8_t frame_type, uint8_t service, uint8_t command, uint
         (void)memcpy(&frame_buffer[ATS_RPC_HEADER_SIZE], payload, payload_length);
     }
 
-    status = ats_rpc_transport_write(frame_buffer, frame_length);
+    status = ats_rpc_transport_write(channel, frame_buffer, frame_length);
     ats_free(frame_buffer);
     return status;
 }
 
-static int recv_frame(ats_rpc_frame_t *frame, uint32_t timeout_ms)
+static int recv_frame(ats_rpc_channel_t channel, ats_rpc_frame_t *frame, uint32_t timeout_ms)
 {
     uint8_t header[ATS_RPC_HEADER_SIZE];
     uint16_t payload_length;
@@ -291,7 +374,7 @@ static int recv_frame(ats_rpc_frame_t *frame, uint32_t timeout_ms)
 
     for (;;)
     {
-        status = read_exact(&header[0], 1U, timeout_ms);
+        status = read_exact(channel, &header[0], 1U, timeout_ms);
         if (status != ATS_EC_OK)
         {
             return status;
@@ -302,7 +385,7 @@ static int recv_frame(ats_rpc_frame_t *frame, uint32_t timeout_ms)
             continue;
         }
 
-        status = read_exact(&header[1], 1U, timeout_ms);
+        status = read_exact(channel, &header[1], 1U, timeout_ms);
         if (status != ATS_EC_OK)
         {
             return status;
@@ -316,7 +399,7 @@ static int recv_frame(ats_rpc_frame_t *frame, uint32_t timeout_ms)
         break;
     }
 
-    status = read_exact(&header[2], (uint16_t)(ATS_RPC_HEADER_SIZE - 2U), timeout_ms);
+    status = read_exact(channel, &header[2], (uint16_t)(ATS_RPC_HEADER_SIZE - 2U), timeout_ms);
     if (status != ATS_EC_OK)
     {
         return status;
@@ -332,7 +415,7 @@ static int recv_frame(ats_rpc_frame_t *frame, uint32_t timeout_ms)
             return ATS_EC_NO_MEMORY;
         }
 
-        status = read_exact(data_buffer, payload_length, timeout_ms);
+        status = read_exact(channel, data_buffer, payload_length, timeout_ms);
         if (status != ATS_EC_OK)
         {
             ats_free(data_buffer);
@@ -343,14 +426,13 @@ static int recv_frame(ats_rpc_frame_t *frame, uint32_t timeout_ms)
     }
     else
     {
-        data_buffer = NULL;
         frame->payload = NULL;
     }
 
-    frame->frame_type = header[2];
-    frame->service = header[3];
-    frame->command = header[4];
-    frame->request_id = header[5];
+    frame->frame_type     = header[2];
+    frame->service        = header[3];
+    frame->command        = header[4];
+    frame->request_id     = header[5];
     frame->payload_length = payload_length;
 
     return ATS_EC_OK;
@@ -358,10 +440,7 @@ static int recv_frame(ats_rpc_frame_t *frame, uint32_t timeout_ms)
 
 static void rpc_task(void *args)
 {
-    (void)args;
-    (void)ats_rpc_register_service(ATS_RPC_SERVICE_CORE, ats_rpc_core_handler);
-    (void)ats_rpc_register_service(ATS_RPC_SERVICE_PRINTER, ats_rpc_printer_handler);
-    (void)ats_rpc_register_service(ATS_RPC_SERVICE_NET, ats_rpc_net_handler);
+    const ats_rpc_channel_t channel = (ats_rpc_channel_t)(uintptr_t)args;
 
     for (;;)
     {
@@ -370,7 +449,7 @@ static void rpc_task(void *args)
 
         (void)memset(&frame, 0, sizeof(frame));
 
-        status = recv_frame(&frame, portMAX_DELAY);
+        status = recv_frame(channel, &frame, portMAX_DELAY);
         if (status != ATS_EC_OK)
         {
             continue;
@@ -381,7 +460,6 @@ static void rpc_task(void *args)
         if (frame.payload != NULL)
         {
             ats_free(frame.payload);
-            frame.payload = NULL;
         }
     }
 }
@@ -457,7 +535,8 @@ void ats_rpc_event_for_crash(uint32_t pc, uint32_t lr)
         frame[31] = (uint8_t)((mmfar >> 24) & 0xFFU);
     }
 
-    (void)ats_rpc_transport_write(frame, sizeof(frame));
+    /* crash 上下文不使用 mutex，直接写入 CTRL 通道 */
+    ats_rpc_transport_write_direct(ATS_RPC_CHANNEL_CTRL, frame, sizeof(frame));
 }
 
 int ats_rpc_response(uint8_t service, uint8_t command, uint8_t request_id, const uint8_t *payload, uint16_t payload_length)
@@ -483,7 +562,8 @@ int ats_rpc_request(uint8_t service, uint8_t command, const uint8_t *request_pay
         return ATS_EC_RPC_NOT_INIT;
     }
 
-    taskENTER_CRITICAL();
+    (void)xSemaphoreTake(s_pending_mutex, portMAX_DELAY);
+
     /* 分配唯一 request_id: 1~255 循环 */
     s_request_id_counter++;
     if (s_request_id_counter == 0U)
@@ -501,43 +581,52 @@ int ats_rpc_request(uint8_t service, uint8_t command, const uint8_t *request_pay
             break;
         }
     }
-    taskEXIT_CRITICAL();
+
+    (void)xSemaphoreGive(s_pending_mutex);
 
     if (slot < 0)
     {
         return ATS_EC_NO_MEMORY;
     }
 
-    s_pending[slot].service          = service;
-    s_pending[slot].command          = command;
-    s_pending[slot].response_buf     = response_payload;
+    s_pending[slot].service           = service;
+    s_pending[slot].command           = command;
+    s_pending[slot].response_buf      = response_payload;
     s_pending[slot].response_buf_size = *response_length;
-    s_pending[slot].response_len     = response_length;
-    s_pending[slot].result           = ATS_EC_TIMEOUT;
-    s_pending[slot].request_id       = rid;
+    s_pending[slot].response_len      = response_length;
+    s_pending[slot].result            = ATS_EC_TIMEOUT;
+    s_pending[slot].request_id        = rid;
 
     status = send_frame(ATS_RPC_FRAME_TYPE_REQUEST, service, command, rid, request_payload, request_length);
 
     if (status != ATS_EC_OK)
     {
+        (void)xSemaphoreTake(s_pending_mutex, portMAX_DELAY);
         s_pending[slot].in_use = false;
+        (void)xSemaphoreGive(s_pending_mutex);
         return status;
     }
 
     wait_ticks = (timeout_ms == 0U) ? portMAX_DELAY : pdMS_TO_TICKS(timeout_ms);
     if (xSemaphoreTake(s_pending[slot].semaphore, wait_ticks) != pdTRUE)
     {
+        (void)xSemaphoreTake(s_pending_mutex, portMAX_DELAY);
         s_pending[slot].in_use = false;
+        (void)xSemaphoreGive(s_pending_mutex);
         return ATS_EC_TIMEOUT;
     }
 
+    (void)xSemaphoreTake(s_pending_mutex, portMAX_DELAY);
     status = s_pending[slot].result;
     s_pending[slot].in_use = false;
+    (void)xSemaphoreGive(s_pending_mutex);
+
     return status;
 }
 
 void ats_rpc_init(void)
 {
+    static const char *task_names[] = {"RPC_CTRL", "RPC_DISP", "RPC_DATA", "RPC_LOG"};
     UBaseType_t i;
 
     if (s_rpc_initialized)
@@ -545,13 +634,24 @@ void ats_rpc_init(void)
         return;
     }
 
+    /* register callbacks */
     ats_net_rpc_register_callback(&s_net_rpc_callback);
     ats_printer_rpc_register_callback(&s_printer_rpc_callback);
 
+    /* create pending table mutex */
+    s_pending_mutex = xSemaphoreCreateMutex();
+
+    /* create per-channel TX mutexes */
+    for (i = 0U; i < ATS_RPC_CHANNEL_COUNT; ++i)
+    {
+        s_tx_mutex[i] = xSemaphoreCreateMutex();
+    }
+
+    /* create pending slot semaphores */
     for (i = 0U; i < ATS_RPC_MAX_PENDING; ++i)
     {
         s_pending[i].semaphore = xSemaphoreCreateBinary();
-        s_pending[i].in_use = false;
+        s_pending[i].in_use    = false;
         s_pending[i].request_id = 0U;
         if (s_pending[i].semaphore != NULL)
         {
@@ -559,16 +659,31 @@ void ats_rpc_init(void)
         }
     }
 
-    for (int i = 0U; i < ATS_RPC_MAX_SERVICES; ++i)
+    /* clear handler table */
+    for (i = 0U; i < ATS_RPC_MAX_SERVICES; ++i)
     {
         s_handlers[i] = NULL;
     }
 
-    if (xTaskCreate(rpc_task, "RPC", 2048U / sizeof(StackType_t), NULL, tskIDLE_PRIORITY + 2U, NULL) != pdPASS)
+    /* register service handlers */
+    (void)ats_rpc_register_service(ATS_RPC_SERVICE_CORE, ats_rpc_core_handler);
+    (void)ats_rpc_register_service(ATS_RPC_SERVICE_PRINTER, ats_rpc_printer_handler);
+    (void)ats_rpc_register_service(ATS_RPC_SERVICE_NET, ats_rpc_net_handler);
+
+    /* create 4 rpc tasks, one per channel */
+    for (i = 0U; i < ATS_RPC_CHANNEL_COUNT; ++i)
     {
-        for (;;)
+        if (xTaskCreate(rpc_task,
+                        task_names[i],
+                        1024U / sizeof(StackType_t),
+                        (void *)(uintptr_t)i,
+                        tskIDLE_PRIORITY + 2U,
+                        NULL) != pdPASS)
         {
-            __asm volatile ("wfi\n");
+            for (;;)
+            {
+                __asm volatile ("wfi\n");
+            }
         }
     }
 
@@ -601,12 +716,14 @@ void ats_rpc_dispatch(const ats_rpc_frame_t *frame)
     {
         uint8_t resp_request_id = frame->request_id;
 
+        (void)xSemaphoreTake(s_pending_mutex, portMAX_DELAY);
+
         for (i = 0U; i < ATS_RPC_MAX_PENDING; ++i)
         {
             if (!s_pending[i].in_use)
                 continue;
 
-            /* 按 request_id 精确匹配, 不会误唤醒其他调用者 */
+            /* 按 request_id 精确匹配 */
             if (s_pending[i].request_id != resp_request_id)
                 continue;
 
@@ -626,12 +743,15 @@ void ats_rpc_dispatch(const ats_rpc_frame_t *frame)
             }
 
             (void)xSemaphoreGive(s_pending[i].semaphore);
+
+            (void)xSemaphoreGive(s_pending_mutex);
             return;
         }
 
+        (void)xSemaphoreGive(s_pending_mutex);
         return;
     }
-    
+
     if ((frame->frame_type == ATS_RPC_FRAME_TYPE_REQUEST) || (frame->frame_type == ATS_RPC_FRAME_TYPE_EVENT))
     {
         ats_rpc_handler_t handler = s_handlers[frame->service];
@@ -659,6 +779,23 @@ int ats_rpc_core_handler(const ats_rpc_frame_t *frame)
             {
                 ats_free(buf);
                 break;
+            }
+
+            /* Append heap info in same CSV format: name,remaining,total */
+            {
+                uint32_t used = 0U;
+                uint32_t total = 0U;
+                int heap_ret = ats_heap_info(&used, &total);
+                if (heap_ret == 0)
+                {
+                    uint32_t remaining = total - used;
+                    size_t existing_len = strlen(buf);
+                    size_t remaining_buf = 1024U - existing_len;
+                    if (remaining_buf > 32U)
+                    {
+                        snprintf(buf + existing_len, remaining_buf, "HEAP,%lu,%lu\n", (unsigned long)remaining, (unsigned long)total);
+                    }
+                }
             }
 
             ats_rpc_response(ATS_RPC_SERVICE_CORE, ATS_RPC_CORE_GET_THREAD_INFO, frame->request_id, (const uint8_t *)buf, (uint16_t)strlen(buf));
